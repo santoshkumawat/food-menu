@@ -49,3 +49,6 @@ app.*.map.json
 
 # Kotlin tool state
 .kotlin/
+
+# Gradle build output
+/android/build/
