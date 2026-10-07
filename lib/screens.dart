@@ -8,13 +8,18 @@ import 'notifications.dart';
 import 'store.dart';
 import 'sync.dart';
 import 'tasks.dart';
+import 'updates.dart';
 import 'links.dart';
 import 'widgets.dart';
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key, required this.store, required this.session});
+  const HomeShell(
+      {super.key, required this.store, required this.session, this.updates});
   final AppStore store;
   final Session session;
+
+  /// Looks for a newer release on GitHub. Null in tests.
+  final UpdateChecker? updates;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -33,6 +38,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _store.addListener(_syncSubscription);
     _syncSubscription();
+    widget.updates?.check();
   }
 
   @override
@@ -70,7 +76,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // The background check may have changed the saved data meanwhile.
-    if (state == AppLifecycleState.resumed) _store.reload();
+    if (state == AppLifecycleState.resumed) {
+      _store.reload();
+      widget.updates?.check(); // at most once a day
+    }
   }
 
   /// The sign-in / onboarding screen to show, or null for the main app.
@@ -165,6 +174,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   if (_store.familyCode != null)
                     const MenuOption(
                         'sync', 'Check for menu changes', Icons.sync),
+                  if (widget.updates != null)
+                    const MenuOption(
+                        'update', 'Check for updates', Icons.system_update_alt),
                   if (Sync.available)
                     const MenuOption('signout', 'Sign out', Icons.logout,
                         dividerBefore: true),
@@ -173,7 +185,18 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               const SizedBox(width: 4),
             ],
           ),
-          body: pages[_tab],
+          body: Column(
+            children: [
+              if (widget.updates != null)
+                ListenableBuilder(
+                  listenable: widget.updates!,
+                  builder: (context, _) => widget.updates!.showBanner
+                      ? UpdateBanner(updates: widget.updates!)
+                      : const SizedBox.shrink(),
+                ),
+              Expanded(child: pages[_tab]),
+            ],
+          ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _tab,
             onDestinationSelected: (i) => setState(() => _tab = i),
@@ -225,6 +248,17 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         } catch (_) {
           _snack('Could not check. Are you online?');
         }
+      case 'update':
+        final updates = widget.updates!;
+        final result = await updates.check(force: true);
+        switch (result) {
+          case UpdateResult.available:
+            _snack('Version ${updates.latest!.version} is available');
+          case UpdateResult.upToDate:
+            _snack("You're on the latest version (${updates.installed})");
+          case UpdateResult.failed:
+            _snack('Could not check for updates. Are you online?');
+        }
       case 'signout':
         final ok = await showDialog<bool>(
           context: context,
@@ -243,6 +277,64 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         );
         if (ok == true) await widget.session.signOut();
     }
+  }
+}
+
+/// Shown at the top when a newer release is on GitHub.
+class UpdateBanner extends StatelessWidget {
+  const UpdateBanner({super.key, required this.updates});
+  final UpdateChecker updates;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final info = updates.latest!;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      color: cs.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.system_update_alt, color: cs.onSecondaryContainer),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('Update available: version ${info.version}',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSecondaryContainer)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              info.notes.isEmpty
+                  ? 'Download it and install over the app. Your data stays.'
+                  : info.notes,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: cs.onSecondaryContainer),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(
+                spacing: 4,
+                children: [
+                  TextButton(
+                      onPressed: updates.dismiss, child: const Text('Later')),
+                  FilledButton(
+                      onPressed: updates.openDownload,
+                      child: const Text('Download')),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -48,6 +48,9 @@ Built with Flutter. Data and sign-in run on Firebase's free plan.
 - Menu also has Reminders & times, Send test notification, Check for menu
   changes and Sign out.
 - Works on a single phone without Firebase (no sharing, no sign-in).
+- **Update notice:** once a day the app asks GitHub for the newest release. If
+  it is newer than the installed version, a banner offers **Download** (opens
+  the release page) or **Later**. The menu also has **Check for updates**.
 
 ## Roles in the code
 
@@ -116,8 +119,14 @@ opens the newest release.
    `v1.0.1`, attach `build/app/outputs/flutter-apk/app-release.apk`, write a
    short note and **Publish release**.
 
+Name the tag after the version, such as `v1.0.2` for `version: 1.0.2+3`. The
+app's update notice compares the tag with the installed version number, so a
+tag that does not match the `pubspec.yaml` version would show a wrong banner.
+Mark the release as a normal one: drafts and pre-releases are ignored.
+
 People open the link on their phone, download the APK and allow installs from
-that source. The repository must stay public for the link to work without a
+that source. Phones that already have the app see the update banner within a
+day, or straight away via the menu's **Check for updates**. The repository must stay public for the link to work without a
 GitHub login.
 
 ### Tests
@@ -139,6 +148,8 @@ lib/
   auth_screens.dart    Sign in, verify, profile, create family / invitations
   screens.dart         Today, Week, Family, Health, Reminders, menus
   widgets.dart         Filter pills and the hamburger dropdown
+  updates.dart         Checks GitHub for a newer release; powers the update banner
+  links.dart           Download link and the invite message
 android/               Android project (icons, manifest, signing, Firebase plugin)
 firestore.rules        Security rules to publish in the Firebase console
 tool/icon_gen_test.dart  Draws the launcher icon (flutter test tool/icon_gen_test.dart)

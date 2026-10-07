@@ -6,6 +6,7 @@ import 'notifications.dart';
 import 'screens.dart';
 import 'store.dart';
 import 'sync.dart';
+import 'updates.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,13 +30,21 @@ Future<void> main() async {
     if (store.familyCode != null) await Sync.startBackground();
   }
   final session = Session(store)..start();
-  runApp(App(store: store, session: session));
+  runApp(App(
+    store: store,
+    session: session,
+    updates: UpdateChecker(store.prefs),
+  ));
 }
 
 class App extends StatelessWidget {
-  const App({super.key, required this.store, required this.session});
+  const App(
+      {super.key, required this.store, required this.session, this.updates});
   final AppStore store;
   final Session session;
+
+  /// Null in tests.
+  final UpdateChecker? updates;
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +57,7 @@ class App extends StatelessWidget {
         theme: _theme(Brightness.light),
         darkTheme: _theme(Brightness.dark),
         themeMode: store.themeMode,
-        home: HomeShell(store: store, session: session),
+        home: HomeShell(store: store, session: session, updates: updates),
       ),
     );
   }

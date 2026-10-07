@@ -5,6 +5,10 @@ import 'sync.dart' show isEmail;
 const appDownloadUrl =
     'https://github.com/santoshkumawat/food-menu/releases/latest';
 
+/// GitHub's answer for "newest release", used by the in-app update notice.
+const releasesApiUrl =
+    'https://api.github.com/repos/santoshkumawat/food-menu/releases/latest';
+
 /// The message the admin shares after inviting someone.
 String inviteMessage(String familyName, String inviteKey) {
   final how = isEmail(inviteKey)

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:aaj_kya_banega/account.dart';
 import 'package:aaj_kya_banega/links.dart';
 import 'package:aaj_kya_banega/main.dart';
+import 'package:aaj_kya_banega/screens.dart';
+import 'package:aaj_kya_banega/updates.dart';
 import 'package:aaj_kya_banega/store.dart';
 import 'package:aaj_kya_banega/tasks.dart';
 import 'package:flutter/material.dart';
@@ -163,5 +165,57 @@ void main() {
     final byName = inviteMessage('Kumawat family', 'anjali_k');
     expect(byName, contains('the username: anjali_k'));
     expect(appDownloadUrl, endsWith('/releases/latest'));
+  });
+
+  test('version comparison is numeric, not alphabetical', () {
+    expect(isNewerVersion('v1.0.2', '1.0.1'), isTrue);
+    expect(isNewerVersion('v1.0.10', '1.0.9'), isTrue);
+    expect(isNewerVersion('v1.1', '1.0.5'), isTrue);
+    expect(isNewerVersion('v2.0.0', '1.9.9'), isTrue);
+    expect(isNewerVersion('v1.0.1', '1.0.1'), isFalse);
+    expect(isNewerVersion('v1.0.0', '1.0.1'), isFalse);
+    expect(isNewerVersion('1.0.1+2', '1.0.1'), isFalse);
+  });
+
+  test('GitHub release answers are read safely', () {
+    final info = parseRelease({
+      'tag_name': 'v1.0.2',
+      'html_url': 'https://github.com/x/y/releases/tag/v1.0.2',
+      'body': 'Fixes reminders',
+    });
+    expect(info!.version, '1.0.2');
+    expect(info.url, endsWith('/v1.0.2'));
+    expect(info.notes, 'Fixes reminders');
+    expect(parseRelease({'tag_name': 'v1.0.3', 'draft': true}), isNull);
+    expect(parseRelease({'tag_name': 'v1.0.3', 'prerelease': true}), isNull);
+    expect(parseRelease({'name': 'no tag'}), isNull);
+  });
+
+  testWidgets('update banner shows for a newer release until dismissed',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final updates = UpdateChecker(prefs)
+      ..installed = '1.0.1'
+      ..latest = const UpdateInfo('1.0.2', 'https://example.com/r', 'Notes here');
+    expect(updates.showBanner, isTrue);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: UpdateBanner(updates: updates)),
+    ));
+    expect(find.textContaining('1.0.2'), findsOneWidget);
+    expect(find.text('Download'), findsOneWidget);
+    expect(find.text('Notes here'), findsOneWidget);
+
+    updates.dismiss();
+    expect(updates.showBanner, isFalse); // same version stays hidden
+
+    // A newer release brings the banner back.
+    updates.latest = const UpdateInfo('1.0.3', 'https://example.com/r', '');
+    expect(updates.showBanner, isTrue);
+
+    // Already on the latest: nothing to show.
+    updates.installed = '1.0.3';
+    expect(updates.showBanner, isFalse);
   });
 }
