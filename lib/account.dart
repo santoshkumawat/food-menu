@@ -157,7 +157,9 @@ class Session extends ChangeNotifier {
       await batch.commit();
     } on FirebaseException catch (e) {
       if (e.code == 'permission-denied') {
-        throw StateError('That username is already taken');
+        throw StateError(
+            'Could not save. That username may be taken, or the Firestore rules '
+            'in FIREBASE_SETUP.md are not published yet.');
       }
       rethrow;
     }
