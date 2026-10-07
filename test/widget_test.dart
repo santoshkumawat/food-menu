@@ -218,4 +218,19 @@ void main() {
     updates.installed = '1.0.3';
     expect(updates.showBanner, isFalse);
   });
+
+  test('the greeting follows the hour, including late at night', () {
+    for (final h in [0, 1, 3, 5]) {
+      expect(greetingFor(h), startsWith('Night owl'), reason: 'hour $h');
+    }
+    for (final h in [6, 9, 11]) {
+      expect(greetingFor(h), 'Good morning', reason: 'hour $h');
+    }
+    for (final h in [12, 15, 17]) {
+      expect(greetingFor(h), 'Good afternoon', reason: 'hour $h');
+    }
+    for (final h in [18, 21, 23]) {
+      expect(greetingFor(h), 'Good evening', reason: 'hour $h');
+    }
+  });
 }

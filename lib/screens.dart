@@ -455,14 +455,16 @@ const _monthNames = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-String _greeting(DateTime now) {
-  final h = now.hour;
-  return h < 12
-      ? 'Good morning'
-      : h < 17
-          ? 'Good afternoon'
-          : 'Good evening';
+/// Greeting for an hour of the day (0-23): morning from 6 AM, afternoon from
+/// 12 PM, evening from 6 PM, and "Night owl" from 12 AM until 6 AM.
+String greetingFor(int hour) {
+  if (hour >= 6 && hour < 12) return 'Good morning';
+  if (hour >= 12 && hour < 18) return 'Good afternoon';
+  if (hour >= 18) return 'Good evening';
+  return 'Night owl 🦉';
 }
+
+String _greeting(DateTime now) => greetingFor(now.hour);
 
 class SlotCard extends StatelessWidget {
   const SlotCard({

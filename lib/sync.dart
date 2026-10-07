@@ -521,12 +521,29 @@ class Sync {
     }, onError: (_) {}));
 
     if (s.isAdmin) {
-      session.add(_family(code).collection('invites').snapshots().listen((qs) {
-        pendingInvites.value = [
-          for (final d in qs.docs)
-            PendingInvite(d.id, _role(d.data()['role'])),
-        ];
-      }, onError: (_) {}));
+      session.add(_family(code).collection('invites').snapshots().listen(
+        (qs) async {
+          // An invite is still pending only while the invited person's copy
+          // exists. When they accept or decline, that copy is deleted, so the
+          // admin's copy is stale: remove it and leave it out of the list.
+          final pending = <PendingInvite>[];
+          for (final d in qs.docs) {
+            var open = true; // offline: keep showing it
+            try {
+              open = (await _inbox(d.id).doc(code).get()).exists;
+            } catch (_) {}
+            if (open) {
+              pending.add(PendingInvite(d.id, _role(d.data()['role'])));
+            } else {
+              try {
+                await d.reference.delete();
+              } catch (_) {}
+            }
+          }
+          pendingInvites.value = pending;
+        },
+        onError: (_) {},
+      ));
     }
     return session;
   }
