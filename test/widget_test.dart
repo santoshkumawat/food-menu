@@ -102,4 +102,27 @@ void main() {
     again.clearTaskTime(false, Task.meBreakfast);
     expect(again.hasAnyTaskTime, isFalse);
   });
+
+  test('family data (menu, guidelines, medicines) is replaced on join',
+      () async {
+    final admin = await newStore();
+    admin.setDish(2, Slot.dinner, 'Sev Paratha');
+    admin.setGuidelines(['Drink water']);
+    admin.setMedicines(['8 AM - vitamin']);
+    final shared = admin.sharedFields();
+
+    // A new member's phone starts empty and receives the family's copy.
+    final member = await newStore();
+    member.setDish(1, Slot.lunch, 'local leftover');
+    member.applyRemoteMenu(shared['menu'] as String, 4,
+        guidelines: List<String>.from(shared['guidelines'] as List),
+        medicines: List<String>.from(shared['medicines'] as List));
+
+    final reopened = AppStore(member.prefs);
+    expect(reopened.dish(2, Slot.dinner), 'Sev Paratha');
+    expect(reopened.dish(1, Slot.lunch), isEmpty);
+    expect(reopened.guidelines, ['Drink water']);
+    expect(reopened.medicines, ['8 AM - vitamin']);
+    expect(reopened.lastSeenRev, 4);
+  });
 }

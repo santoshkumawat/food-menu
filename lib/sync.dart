@@ -213,7 +213,7 @@ class Sync {
         },
       }).timeout(_timeout);
       await _shared(code).set({
-        'menu': s.menuToJson(),
+        ...s.sharedFields(),
         'rev': 1,
         'editedById': uid,
         'editedByName': name,
@@ -246,6 +246,24 @@ class Sync {
       await _inbox(inv.key).doc(inv.code).delete();
     } catch (_) {}
   }
+
+  /// Copies the family's shared data onto this phone (used right after
+  /// joining, so the new member sees everything immediately).
+  static Future<void> loadShared(AppStore s, String code) async {
+    final data = (await _shared(code).get().timeout(_timeout)).data();
+    if (data == null) return;
+    s.applyRemoteMenu(
+      data['menu'] as String,
+      data['rev'] as int? ?? 1,
+      guidelines: _strings(data['guidelines']),
+      medicines: _strings(data['medicines']),
+    );
+    await _mergeDone(s.prefs, data['done']);
+    await s.reloadDone();
+  }
+
+  static List<String>? _strings(Object? v) =>
+      v is List ? [for (final e in v) '$e'] : null;
 
   static Future<void> declineInvite(Invite inv) =>
       _inbox(inv.key).doc(inv.code).delete();
@@ -354,7 +372,7 @@ class Sync {
     if (!available || code == null) return;
     try {
       await _shared(code).set({
-        'menu': s.menuToJson(),
+        ...s.sharedFields(),
         'rev': FieldValue.increment(1),
         'editedById': _myUid,
         'editedByName': s.myName,
@@ -411,16 +429,29 @@ class Sync {
     final before = {
       for (final e in s.menu.entries) e.key: Map<Slot, String>.of(e.value)
     };
-    s.applyRemoteMenu(data['menu'] as String, rev);
+    final oldGuidelines = [...s.guidelines];
+    final oldMedicines = [...s.medicines];
+    s.applyRemoteMenu(
+      data['menu'] as String,
+      rev,
+      guidelines: _strings(data['guidelines']),
+      medicines: _strings(data['medicines']),
+    );
     final who = (data['editedByName'] as String?)?.trim();
     return (
       who: (who == null || who.isEmpty) ? 'Someone' : who,
-      summary: _diff(before, s.menu),
+      summary: _summary(before, s.menu,
+          guidelinesChanged: !listEquals(oldGuidelines, s.guidelines),
+          medicinesChanged: !listEquals(oldMedicines, s.medicines)),
     );
   }
 
-  static String _diff(
-      Map<int, Map<Slot, String>> a, Map<int, Map<Slot, String>> b) {
+  static String _summary(
+    Map<int, Map<Slot, String>> a,
+    Map<int, Map<Slot, String>> b, {
+    required bool guidelinesChanged,
+    required bool medicinesChanged,
+  }) {
     final changes = <String>[];
     for (var day = 1; day <= 7; day++) {
       for (final slot in Slot.values) {
@@ -431,9 +462,11 @@ class Sync {
         }
       }
     }
-    if (changes.isEmpty) return 'Menu updated';
-    final shown = changes.take(3).join('\n');
-    return changes.length > 3 ? '$shown\n+${changes.length - 3} more' : shown;
+    final shown = changes.take(3).toList();
+    if (changes.length > 3) shown.add('+${changes.length - 3} more');
+    if (guidelinesChanged) shown.add('Guidelines updated');
+    if (medicinesChanged) shown.add('Medicine list updated');
+    return shown.isEmpty ? 'Family data updated' : shown.join('\n');
   }
 
   /// Copies this account's member entry (role, name, admin) onto the phone.

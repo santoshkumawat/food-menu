@@ -125,7 +125,8 @@ class AppStore extends ChangeNotifier {
   int lastSeenRev = 0;
   Set<String> done = {};
 
-  /// Called after the user edits the menu (not for edits received from sync).
+  /// Called after the user edits shared data: menu, guidelines or medicines
+  /// (not for edits received from sync).
   VoidCallback? onMenuEdited;
 
   bool get isSetUp => role != null;
@@ -170,11 +171,13 @@ class AppStore extends ChangeNotifier {
   void setMedicines(List<String> v) {
     medicines = v;
     _save();
+    onMenuEdited?.call();
   }
 
   void setGuidelines(List<String> v) {
     guidelines = v;
     _save();
+    onMenuEdited?.call();
   }
 
   void setProfile(Role r, String name, String? code,
@@ -235,9 +238,19 @@ class AppStore extends ChangeNotifier {
           '${e.key}': {for (final s in e.value.entries) s.key.name: s.value},
       });
 
-  /// Replaces the menu with one received from the shared copy.
-  void applyRemoteMenu(String json, int rev) {
+  /// Everything the family shares: menu, guidelines and medicines.
+  Map<String, dynamic> sharedFields() => {
+        'menu': menuToJson(),
+        'guidelines': guidelines,
+        'medicines': medicines,
+      };
+
+  /// Replaces the shared data with the family's copy.
+  void applyRemoteMenu(String json, int rev,
+      {List<String>? guidelines, List<String>? medicines}) {
     _menuFromJson(jsonDecode(json) as Map<String, dynamic>);
+    if (guidelines != null) this.guidelines = guidelines;
+    if (medicines != null) this.medicines = medicines;
     lastSeenRev = rev;
     _save();
   }

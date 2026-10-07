@@ -84,6 +84,12 @@ class Session extends ChangeNotifier {
             admin: me['admin'] == true,
             family: (fam?['name'] ?? '') as String,
           );
+          if (store.lastSeenRev == 0) {
+            // New phone or fresh install: fetch the family's data now.
+            try {
+              await Sync.loadShared(store, code);
+            } catch (_) {}
+          }
           await Sync.startBackground();
           return _set(AuthState.ready);
         }
@@ -182,6 +188,8 @@ class Session extends ChangeNotifier {
 
   Future<void> acceptInvite(Invite inv) async {
     await Sync.acceptInvite(inv, name, username);
+    // Pull the family's menu, guidelines and medicines right away.
+    await Sync.loadShared(store, inv.code);
     await _evaluate(_auth.currentUser);
   }
 
