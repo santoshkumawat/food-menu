@@ -199,7 +199,7 @@ class Notifier {
         );
       case Task.memberWater:
         return (
-          title: 'Morning routine',
+          title: 'Morning Routine',
           body: _or(d(Slot.morning), 'Time for your morning routine'),
           doneLabel: '',
         );

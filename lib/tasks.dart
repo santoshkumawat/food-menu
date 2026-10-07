@@ -25,7 +25,7 @@ enum Task {
   cookSoak(Role.cook, 'Soak dry fruits for tomorrow'),
   cookSoakFollow(Role.cook, 'Soaking follow-up'),
   // Family member
-  memberWater(Role.familyMember, 'Morning routine'),
+  memberWater(Role.familyMember, 'Morning Routine'),
   memberBreakfast(Role.familyMember, 'Breakfast'),
   memberLunch(Role.familyMember, 'Lunch'),
   memberSnack(Role.familyMember, 'Evening Snacks'),

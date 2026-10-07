@@ -10,7 +10,7 @@ enum Slot { morning, breakfast, lunch, snack, dinner, night }
 
 extension SlotInfo on Slot {
   String get label => switch (this) {
-        Slot.morning => 'Morning routine',
+        Slot.morning => 'Morning Routine',
         Slot.breakfast => 'Breakfast',
         Slot.lunch => 'Lunch',
         Slot.snack => 'Evening Snacks',
@@ -29,22 +29,16 @@ extension SlotInfo on Slot {
 
   /// Placeholder shown in the edit box while it is empty.
   String get hint => switch (this) {
-        Slot.morning => 'e.g. Warm water, soaked dry fruits',
+        Slot.morning => 'e.g. Warm water with honey, soaked almonds and walnuts',
         Slot.breakfast => 'e.g. Moong dal cheela, poha with peanuts, vegetable oats upma',
         Slot.lunch => 'e.g. Roti, dal, seasonal sabzi, cucumber salad',
         Slot.snack => 'e.g. Roasted chana, fruit, makhana, sprouts chaat',
         Slot.dinner => 'e.g. Moong dal khichdi, vegetable soup, 2 roti with lauki sabzi',
-        Slot.night => 'e.g. Milk',
+        Slot.night => 'e.g. Warm turmeric milk, or a glass of plain milk',
       };
 
-  String get shortLabel => switch (this) {
-        Slot.morning => 'Morning',
-        Slot.breakfast => 'Breakfast',
-        Slot.lunch => 'Lunch',
-        Slot.snack => 'Evening Snacks',
-        Slot.dinner => 'Dinner',
-        Slot.night => 'Bedtime',
-      };
+  /// Same as [label]: every screen uses one name per slot.
+  String get shortLabel => label;
 
   /// Icon colour for this slot, from the Expensely palette
   /// (warm, expense, good, cool, income, accent) for each theme.

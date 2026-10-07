@@ -44,9 +44,9 @@ void main() {
     // Today: the cook's checklist is not shown for the Family member role.
     expect(find.text('Your checklist'), findsNothing);
     expect(find.text('Kitchen status'), findsNothing);
-    await tester.tap(find.text('Morning'));
+    await tester.tap(find.text('Morning Routine').first);
     await tester.pump();
-    expect(find.text('Morning routine'), findsWidgets);
+    expect(find.text('Morning Routine'), findsWidgets);
 
     // Week tab and the sort menu open without layout errors.
     await tester.tap(find.text('Week'));
@@ -235,7 +235,7 @@ void main() {
   });
 
   test('every slot has a placeholder and the last one is Bedtime', () {
-    expect(Slot.morning.hint, 'e.g. Warm water, soaked dry fruits');
+    expect(Slot.morning.hint, startsWith('e.g. Warm water with honey'));
     expect(Slot.breakfast.hint, startsWith('e.g. Moong dal cheela'));
     expect(Slot.lunch.hint, startsWith('e.g. Roti, dal'));
     expect(Slot.snack.hint, startsWith('e.g. Roasted chana'));
@@ -248,7 +248,7 @@ void main() {
           isFalse,
           reason: '${s.name} hint');
     }
-    expect(Slot.night.hint, 'e.g. Milk');
+    expect(Slot.night.hint, startsWith('e.g. Warm turmeric milk'));
     expect(Slot.night.label, 'Bedtime');
     for (final s in Slot.values) {
       expect(s.hint, isNotEmpty);
@@ -268,5 +268,26 @@ void main() {
     await tester.tap(find.text('Tap to add').first);
     await tester.pumpAndSettle();
     expect(find.textContaining('Moong dal cheela'), findsOneWidget);
+  });
+
+  test('each slot has one name, shown the same on every screen', () {
+    expect([for (final s in Slot.values) s.label], [
+      'Morning Routine',
+      'Breakfast',
+      'Lunch',
+      'Evening Snacks',
+      'Dinner',
+      'Bedtime',
+    ]);
+    for (final s in Slot.values) {
+      expect(s.shortLabel, s.label); // pills use the same name as the cards
+    }
+    // Reminder names match the slot names too.
+    expect(Task.memberWater.label, Slot.morning.label);
+    expect(Task.memberBreakfast.label, Slot.breakfast.label);
+    expect(Task.memberLunch.label, Slot.lunch.label);
+    expect(Task.memberSnack.label, Slot.snack.label);
+    expect(Task.memberDinner.label, Slot.dinner.label);
+    expect(Task.memberMilk.label, Slot.night.label);
   });
 }
