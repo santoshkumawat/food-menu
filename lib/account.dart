@@ -203,6 +203,13 @@ class Session extends ChangeNotifier {
 /// Turns Firebase and app errors into short messages for the screen.
 String errorMessage(Object e) {
   if (e is StateError) return e.message;
+  final raw = e.toString();
+  if (raw.contains('CONFIGURATION_NOT_FOUND') ||
+      (e is FirebaseAuthException && e.code == 'operation-not-allowed')) {
+    return 'Sign-in is not turned on in Firebase yet. In the Firebase console '
+        'open Build > Authentication > Get started, then Sign-in method > '
+        'Email/Password > Enable.';
+  }
   if (e is FirebaseAuthException) {
     return switch (e.code) {
       'invalid-email' => 'That email address looks wrong.',
@@ -214,11 +221,20 @@ String errorMessage(Object e) {
       'weak-password' => 'Choose a longer password (at least 6 characters).',
       'too-many-requests' => 'Too many attempts. Try again in a few minutes.',
       'network-request-failed' => 'No internet connection.',
-      _ => 'Something went wrong (${e.code}).',
+      _ => 'Sign-in failed (${e.code}): ${_short(e.message)}',
     };
   }
   if (e is FirebaseException && e.code == 'permission-denied') {
     return 'Not allowed. Check the Firestore rules in FIREBASE_SETUP.md.';
   }
-  return 'Something went wrong. Check your internet and try again.';
+  if (e is FirebaseException) {
+    return 'Server error (${e.code}): ${_short(e.message)}';
+  }
+  return 'Something went wrong: ${_short(raw)}';
+}
+
+String _short(String? s) {
+  final t = (s ?? '').replaceAll('
+', ' ').trim();
+  return t.length > 140 ? '${t.substring(0, 140)}...' : t;
 }
