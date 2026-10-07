@@ -71,3 +71,9 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+// Firebase is only wired in once google-services.json has been added
+// (see FIREBASE_SETUP.md); without it the app runs in single-phone mode.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}

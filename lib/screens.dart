@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'notifications.dart';
 import 'store.dart';
+import 'sync.dart';
+import 'tasks.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, required this.store});
@@ -11,37 +16,79 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _tab = 0;
+  StreamSubscription<void>? _sub;
+  String? _subscribedCode;
+
+  AppStore get _store => widget.store;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _store.addListener(_syncSubscription);
+    _syncSubscription();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _store.removeListener(_syncSubscription);
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  /// Follows the shared menu while the app is open.
+  void _syncSubscription() {
+    final code = _store.familyCode;
+    if (code == _subscribedCode) return;
+    _sub?.cancel();
+    _subscribedCode = code;
+    _sub = Sync.listen(_store, (who, summary) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Menu updated by $who\n$summary')),
+      );
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The background check may have changed the saved data meanwhile.
+    if (state == AppLifecycleState.resumed) _store.reload();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.store;
-    final pages = [
-      TodayPage(store: s),
-      WeekPage(store: s),
-      HealthPage(store: s),
-      SettingsPage(store: s),
-    ];
-    return Scaffold(
-      appBar: AppBar(title: const Text('Aaj Kya Banega?')),
-      body: ListenableBuilder(
-        listenable: s,
-        builder: (_, _) => pages[_tab],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.today), label: 'Today'),
-          NavigationDestination(
-              icon: Icon(Icons.calendar_view_week), label: 'Week'),
-          NavigationDestination(
-              icon: Icon(Icons.favorite_border), label: 'Health'),
-          NavigationDestination(
-              icon: Icon(Icons.settings_outlined), label: 'Settings'),
-        ],
-      ),
+    return ListenableBuilder(
+      listenable: _store,
+      builder: (context, _) {
+        if (!_store.isSetUp) return SetupPage(store: _store);
+        final pages = [
+          TodayPage(store: _store),
+          WeekPage(store: _store),
+          HealthPage(store: _store),
+          SettingsPage(store: _store),
+        ];
+        return Scaffold(
+          appBar: AppBar(title: const Text('Aaj Kya Banega?')),
+          body: pages[_tab],
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _tab,
+            onDestinationSelected: (i) => setState(() => _tab = i),
+            destinations: const [
+              NavigationDestination(icon: Icon(Icons.today), label: 'Today'),
+              NavigationDestination(
+                  icon: Icon(Icons.calendar_view_week), label: 'Week'),
+              NavigationDestination(
+                  icon: Icon(Icons.favorite_border), label: 'Health'),
+              NavigationDestination(
+                  icon: Icon(Icons.settings_outlined), label: 'Settings'),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -69,6 +116,155 @@ Future<String?> _askText(BuildContext context, String title, String initial,
     ),
   );
 }
+
+// --- first-run setup ------------------------------------------------------
+
+class SetupPage extends StatefulWidget {
+  const SetupPage({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  State<SetupPage> createState() => _SetupPageState();
+}
+
+class _SetupPageState extends State<SetupPage> {
+  Role? _role;
+  final _name = TextEditingController();
+  final _code = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _code.dispose();
+    super.dispose();
+  }
+
+  String get _displayName => _name.text.trim().isEmpty
+      ? (_role == Role.cook ? 'Cook' : 'Me')
+      : _name.text.trim();
+
+  Future<void> _run(Future<void> Function() job) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await job();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Could not reach the server. Check the internet and try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _create() => _run(() async {
+        final code = await Sync.createFamily(widget.store, _displayName);
+        widget.store.setProfile(_role!, _displayName, code);
+        await Sync.startBackground();
+      });
+
+  Future<void> _join() => _run(() async {
+        final code = _code.text.trim().toUpperCase();
+        final ok = await Sync.joinFamily(widget.store, code);
+        if (!ok) {
+          setState(() => _error = 'No family found with that code.');
+          return;
+        }
+        widget.store.setProfile(_role!, _displayName, code);
+        await Sync.startBackground();
+      });
+
+  void _localOnly() =>
+      widget.store.setProfile(_role!, _displayName, null);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Welcome to Aaj Kya Banega?')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text('Who is using this phone?',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          RadioGroup<Role>(
+            groupValue: _role,
+            onChanged: (v) => setState(() => _role = v),
+            child: Column(
+              children: [
+                for (final r in Role.values)
+                  RadioListTile<Role>(value: r, title: Text(r.label)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(
+              labelText: 'Your name (shown when you edit the menu)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          if (_role != null) ...[
+            const SizedBox(height: 24),
+            if (Sync.available) ...[
+              FilledButton(
+                onPressed: _busy ? null : _create,
+                child: const Text('Start a new family (first phone)'),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _code,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  labelText: 'Family code from the other phone',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.tonal(
+                onPressed: _busy ? null : _join,
+                child: const Text('Join with this code'),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: _busy ? null : _localOnly,
+                child: const Text('Use on this phone only (no sharing)'),
+              ),
+            ] else ...[
+              const Text(
+                'Sharing between phones is not set up in this build '
+                '(google-services.json is missing), so the menu stays on this phone.',
+              ),
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: _localOnly,
+                child: const Text('Continue on this phone'),
+              ),
+            ],
+          ],
+          if (_busy)
+            const Padding(
+              padding: EdgeInsets.only(top: 16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Text(_error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- menu cards -----------------------------------------------------------
 
 class SlotCard extends StatelessWidget {
   const SlotCard({
@@ -111,6 +307,46 @@ class TodayPage extends StatelessWidget {
   const TodayPage({super.key, required this.store});
   final AppStore store;
 
+  bool _needsSoaking(DateTime now) => store
+      .dish(now.add(const Duration(days: 1)).weekday, Slot.morning)
+      .toLowerCase()
+      .contains('almond');
+
+  Widget _statusCard(BuildContext context, DateTime now) {
+    final isCook = store.role == Role.cook;
+    final cookDone = store.isDone(now, 'cook');
+    final soakNeeded = _needsSoaking(now);
+    final soakDone = store.isDone(now, 'soak');
+
+    Widget row(String label, bool done, VoidCallback? onMark) => ListTile(
+          dense: true,
+          leading: Icon(done ? Icons.check_circle : Icons.radio_button_unchecked,
+              color: done ? Colors.green : null),
+          title: Text(label),
+          trailing: (isCook && !done && onMark != null)
+              ? FilledButton.tonal(onPressed: onMark, child: const Text('Done'))
+              : Text(done ? 'Done' : 'Not yet'),
+        );
+
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Text(isCook ? 'Your checklist' : 'Kitchen status',
+                style: Theme.of(context).textTheme.titleMedium),
+          ),
+          row('Breakfast & lunch prepared', cookDone,
+              () => Notifier.instance.markDone(now, 'cook')),
+          if (soakNeeded)
+            row('Dry fruits soaked for tomorrow', soakDone,
+                () => Notifier.instance.markDone(now, 'soak')),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -131,6 +367,7 @@ class TodayPage extends StatelessWidget {
           child: Text(dayNames[now.weekday - 1],
               style: Theme.of(context).textTheme.headlineMedium),
         ),
+        _statusCard(context, now),
         for (final s in Slot.values)
           if (store.dish(now.weekday, s).isNotEmpty || s.isMeal)
             SlotCard(
@@ -281,22 +518,77 @@ class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key, required this.store});
   final AppStore store;
 
-  Future<void> _pick(BuildContext context, bool weekend, Slot slot) async {
+  Future<void> _pick(BuildContext context, bool weekend, Task task) async {
     final day = weekend ? DateTime.saturday : DateTime.monday;
-    final cur = store.notifyTime(day, slot);
+    final cur = store.taskTime(task, day);
     final t = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: cur ~/ 60, minute: cur % 60),
     );
-    if (t != null) store.setNotifyTime(weekend, slot, t.hour * 60 + t.minute);
+    if (t != null) store.setTaskTime(weekend, task, t.hour * 60 + t.minute);
+  }
+
+  Future<void> _confirmReset(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Change role or family?'),
+        content: const Text(
+            'This phone will go back to the setup screen. The shared menu stays online.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Reset')),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await Sync.stopBackground();
+      store.resetProfile();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final role = store.role!;
+    final code = store.familyCode;
     return ListView(
       children: [
+        ListTile(
+          leading: const Icon(Icons.person_outline),
+          title: Text(store.myName.isEmpty ? role.label : store.myName),
+          subtitle: Text(role.label),
+          trailing: TextButton(
+            onPressed: () => _confirmReset(context),
+            child: const Text('Change'),
+          ),
+        ),
+        if (code != null)
+          ListTile(
+            leading: const Icon(Icons.group_outlined),
+            title: Text('Family code: $code'),
+            subtitle: const Text('Enter this on the other phone to share the menu'),
+            trailing: IconButton(
+              icon: const Icon(Icons.copy),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: code));
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('Code copied')));
+              },
+            ),
+          )
+        else
+          const ListTile(
+            leading: Icon(Icons.phone_android),
+            title: Text('This phone only'),
+            subtitle: Text('The menu is not shared with another phone'),
+          ),
+        const Divider(),
         SwitchListTile(
-          title: const Text('Daily notifications'),
+          title: const Text('Notifications'),
           value: store.notificationsOn,
           onChanged: store.setNotificationsOn,
         ),
@@ -304,24 +596,43 @@ class SettingsPage extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
             child: Text(
-              weekend ? 'Weekend reminder times (Sat-Sun)' : 'Weekday reminder times (Mon-Fri)',
+              weekend
+                  ? 'Weekend reminder times (Sat-Sun)'
+                  : 'Weekday reminder times (Mon-Fri)',
               style: Theme.of(context).textTheme.titleSmall,
             ),
           ),
-          for (final s in Slot.values)
+          for (final t in Task.forRole(role))
             ListTile(
-              leading: Icon(s.icon),
-              title: Text(s.label),
-              trailing: Text(formatMinutes(store.notifyTime(
-                  weekend ? DateTime.saturday : DateTime.monday, s))),
-              onTap: () => _pick(context, weekend, s),
+              title: Text(t.label),
+              trailing: Text(formatMinutes(store.taskTime(
+                  t, weekend ? DateTime.saturday : DateTime.monday))),
+              onTap: () => _pick(context, weekend, t),
             ),
         ],
         const Divider(),
+        if (code != null)
+          ListTile(
+            leading: const Icon(Icons.sync),
+            title: const Text('Check for menu changes now'),
+            onTap: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                await Sync.backgroundCheck();
+                await store.reload();
+                messenger.showSnackBar(
+                    const SnackBar(content: Text('Checked for changes')));
+              } catch (_) {
+                messenger.showSnackBar(
+                    const SnackBar(content: Text('Could not check. Are you online?')));
+              }
+            },
+          ),
         ListTile(
           leading: const Icon(Icons.notifications_active_outlined),
           title: const Text('Send test notification'),
-          onTap: () => Notifier.instance.showTest(),
+          onTap: () => Notifier.instance
+              .showNow('Aaj Kya Banega?', 'Notifications are working.'),
         ),
       ],
     );
