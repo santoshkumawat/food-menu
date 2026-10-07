@@ -37,7 +37,7 @@ menu and the "done" ticks.
 - **Create a family** (you become the **admin** and pick your own role), or
   accept an **invitation** waiting for your email or username.
 - **Admin** (Settings): invite by email or username and assign a role (Cook or
-  Me), change anyone's role, remove members, cancel pending invitations.
+  Family member), change anyone's role, remove members, cancel pending invitations.
 - **Members** can see who is in the family and can leave it. The admin cannot
   leave.
 - Firebase's free plan cannot send the invitation email itself. After
