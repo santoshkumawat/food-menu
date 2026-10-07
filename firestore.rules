@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function verified() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function myUsername() {
+      return get(/databases/$(database)/documents/users/$(me())).data.username;
+    }
+    function fam(code) {
+      return get(/databases/$(database)/documents/families/$(code)).data;
+    }
+    function isAdmin(code) { return signedIn() && fam(code).adminUid == me(); }
+    function isMember(code) { return signedIn() && me() in fam(code).members; }
+    function inbox(key, code) {
+      return /databases/$(database)/documents/inboxes/$(key)/invites/$(code);
+    }
+    function hasInviteFor(code) {
+      return (verified() && exists(inbox(myEmail(), code)))
+          || exists(inbox(myUsername(), code));
+    }
+    function inviteRole(code) {
+      return (verified() && exists(inbox(myEmail(), code)))
+          ? get(inbox(myEmail(), code)).data.role
+          : get(inbox(myUsername(), code)).data.role;
+    }
+
+    // One document per account: username, name, email, familyCode
+    match /users/{userId} {
+      allow read: if signedIn() && me() == userId;
+      allow create: if verified() && me() == userId
+        && request.resource.data.username is string
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == me();
+      allow update: if signedIn() && me() == userId
+        && request.resource.data.username == resource.data.username;
+      allow delete: if false;
+    }
+
+    // Keeps usernames unique. Create-only.
+    match /usernames/{name} {
+      allow get: if signedIn();
+      allow create: if verified()
+        && request.resource.data.uid == me()
+        && name.matches('^[a-z0-9_]{3,20}$');
+      allow list, update, delete: if false;
+    }
+
+    match /families/{code} {
+      allow get: if signedIn()
+        && (resource == null || me() in resource.data.members);
+      allow create: if verified()
+        && request.resource.data.adminUid == me()
+        && request.resource.data.members.keys().hasOnly([me()])
+        && request.resource.data.members[me()].admin == true;
+      allow update: if isAdmin(code) || selfLeave() || acceptInvite(code);
+      allow list, delete: if false;
+
+      // A member (not the admin) removing only themselves
+      function selfLeave() {
+        let d = request.resource.data.members.diff(resource.data.members);
+        return signedIn()
+          && resource.data.adminUid != me()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+          && d.removedKeys().hasOnly([me()])
+          && d.removedKeys().hasAll([me()])
+          && d.addedKeys().size() == 0
+          && d.changedKeys().size() == 0;
+      }
+
+      // An invited person adding only themselves, with the invited role
+      function acceptInvite(code) {
+        let d = request.resource.data.members.diff(resource.data.members);
+        let mine = request.resource.data.members[me()];
+        return signedIn()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+          && d.addedKeys().hasOnly([me()])
+          && d.addedKeys().hasAll([me()])
+          && d.removedKeys().size() == 0
+          && d.changedKeys().size() == 0
+          && mine.admin == false
+          && hasInviteFor(code)
+          && mine.role == inviteRole(code);
+      }
+
+      // Invitations the admin has sent
+      match /invites/{key} {
+        allow read, write: if isAdmin(code);
+      }
+
+      // Menu and done ticks: members only
+      match /shared/{doc} {
+        allow read, write: if isMember(code);
+      }
+    }
+
+    // An invitation as seen by the person it is addressed to
+    match /inboxes/{key}/invites/{code} {
+      allow read: if signedIn()
+        && ((verified() && key == myEmail()) || key == myUsername() || isAdmin(code));
+      allow create: if isAdmin(code)
+        && request.resource.data.keys().hasOnly(['familyName', 'role', 'invitedBy', 'at'])
+        && request.resource.data.role in ['cook', 'me'];
+      allow delete: if signedIn()
+        && ((verified() && key == myEmail()) || key == myUsername() || isAdmin(code));
+      allow update: if false;
+    }
+  }
+}

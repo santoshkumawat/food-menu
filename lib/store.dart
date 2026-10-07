@@ -143,6 +143,7 @@ class AppStore extends ChangeNotifier {
   String myName = '';
   String? familyCode;
   bool isAdmin = false;
+  String familyName = '';
   int lastSeenRev = 0;
   Set<String> done = {};
 
@@ -185,11 +186,26 @@ class AppStore extends ChangeNotifier {
     _save();
   }
 
-  void setProfile(Role r, String name, String? code, {bool admin = false}) {
+  void setProfile(Role r, String name, String? code,
+      {bool admin = false, String family = ''}) {
     role = r;
     myName = name.trim();
     familyCode = code;
     isAdmin = admin;
+    familyName = family;
+    _save();
+  }
+
+  /// Follows the member entry kept on the server (the admin can change the
+  /// role at any time). Saves only when something changed.
+  void syncMembership(Role r, String name, bool admin, String family) {
+    if (role == r && myName == name && isAdmin == admin && familyName == family) {
+      return;
+    }
+    role = r;
+    myName = name;
+    isAdmin = admin;
+    familyName = family;
     _save();
   }
 
@@ -198,6 +214,7 @@ class AppStore extends ChangeNotifier {
     myName = '';
     familyCode = null;
     isAdmin = false;
+    familyName = '';
     lastSeenRev = 0;
     _save();
   }
@@ -269,6 +286,7 @@ class AppStore extends ChangeNotifier {
       myName = j['name'] as String? ?? '';
       familyCode = j['family'] as String?;
       isAdmin = j['admin'] as bool? ?? false;
+      familyName = j['familyName'] as String? ?? '';
       lastSeenRev = j['rev'] as int? ?? 0;
     } catch (_) {
       // Corrupt data: keep defaults.
@@ -288,6 +306,7 @@ class AppStore extends ChangeNotifier {
         'name': myName,
         'family': familyCode,
         'admin': isAdmin,
+        'familyName': familyName,
         'rev': lastSeenRev,
       }),
     );

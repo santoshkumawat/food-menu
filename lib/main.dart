@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'account.dart';
 import 'notifications.dart';
 import 'screens.dart';
 import 'store.dart';
@@ -26,12 +27,14 @@ Future<void> main() async {
     await notifier.reschedule(store);
     if (store.familyCode != null) await Sync.startBackground();
   }
-  runApp(App(store: store));
+  final session = Session(store)..start();
+  runApp(App(store: store, session: session));
 }
 
 class App extends StatelessWidget {
-  const App({super.key, required this.store});
+  const App({super.key, required this.store, required this.session});
   final AppStore store;
+  final Session session;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +45,7 @@ class App extends StatelessWidget {
         colorSchemeSeed: Colors.deepOrange,
         useMaterial3: true,
       ),
-      home: HomeShell(store: store),
+      home: HomeShell(store: store, session: session),
     );
   }
 }

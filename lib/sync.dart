@@ -31,23 +31,30 @@ void backgroundDispatcher() {
 }
 
 class Member {
-  const Member(this.uid, this.name, this.role, this.admin);
+  const Member(this.uid, this.name, this.username, this.role, this.admin);
   final String uid;
   final String name;
+  final String username;
   final Role role;
   final bool admin;
 }
 
-class JoinRequest {
-  const JoinRequest(this.uid, this.name, this.role);
-  final String uid;
-  final String name;
+/// An invitation waiting for the person it is addressed to.
+class Invite {
+  const Invite(this.key, this.code, this.familyName, this.role, this.invitedBy);
+  final String key; // lower-case email or username it was sent to
+  final String code; // family code
+  final String familyName;
   final Role role;
+  final String invitedBy;
 }
 
-enum JoinResult { notFound, alreadyMember, pending }
-
-enum Decision { approved, declined }
+/// An invitation as the admin sees it.
+class PendingInvite {
+  const PendingInvite(this.key, this.role);
+  final String key;
+  final Role role;
+}
 
 /// A set of live listeners that can be switched off together.
 class SyncSession {
@@ -73,19 +80,27 @@ class SyncSession {
 
 Role _role(Object? v) => Role.values.asNameMap()[v] ?? Role.me;
 
-/// Shares the menu and the "done" ticks between phones through Firestore.
+bool isEmail(String s) => s.contains('@');
+
+/// Lower-case form used as the document id for invites.
+String inviteKey(String input) => input.trim().toLowerCase();
+
+/// Shares the menu and the "done" ticks between family members.
 ///
-/// Data layout:
-///   families/{code}                  adminUid, adminName, members{uid: {...}}
-///   families/{code}/requests/{uid}   people waiting for the admin's approval
-///   families/{code}/shared/state     menu, rev, done flags (members only)
+/// Data layout (see FIREBASE_SETUP.md for the security rules):
+///   users/{uid}                       username, name, email, familyCode
+///   usernames/{username}              uid  (keeps usernames unique)
+///   families/{code}                   name, adminUid, members{uid: {...}}
+///   families/{code}/invites/{key}     invites the admin has sent
+///   families/{code}/shared/state      menu, rev, done flags (members only)
+///   inboxes/{key}/invites/{code}      the invite as the invited person sees it
 /// Everything still works on one phone if Firebase is not set up.
 class Sync {
   static bool available = false;
 
   /// Live copies for the UI.
   static final members = ValueNotifier<List<Member>>([]);
-  static final requests = ValueNotifier<List<JoinRequest>>([]);
+  static final pendingInvites = ValueNotifier<List<PendingInvite>>([]);
 
   static Future<void> init() async {
     if (kIsWeb) return;
@@ -118,25 +133,27 @@ class Sync {
     await Workmanager().cancelByUniqueName('menu-sync');
   }
 
-  // --- helpers ------------------------------------------------------------
+  // --- references ---------------------------------------------------------
+
+  static FirebaseFirestore get _db => FirebaseFirestore.instance;
+
+  static DocumentReference<Map<String, dynamic>> _user(String uid) =>
+      _db.collection('users').doc(uid);
 
   static DocumentReference<Map<String, dynamic>> _family(String code) =>
-      FirebaseFirestore.instance.collection('families').doc(code);
+      _db.collection('families').doc(code);
 
   static DocumentReference<Map<String, dynamic>> _shared(String code) =>
       _family(code).collection('shared').doc('state');
 
-  static CollectionReference<Map<String, dynamic>> _requests(String code) =>
-      _family(code).collection('requests');
+  static DocumentReference<Map<String, dynamic>> _sentInvite(
+          String code, String key) =>
+      _family(code).collection('invites').doc(key);
 
-  /// Signs in anonymously the first time; the account id then stays on the
-  /// phone and identifies it to the server.
-  static Future<String> _uid() async {
-    final auth = FirebaseAuth.instance;
-    final user =
-        auth.currentUser ?? (await auth.signInAnonymously().timeout(_timeout)).user;
-    return user!.uid;
-  }
+  static CollectionReference<Map<String, dynamic>> _inbox(String key) =>
+      _db.collection('inboxes').doc(key).collection('invites');
+
+  static String get _myUid => FirebaseAuth.instance.currentUser!.uid;
 
   static String _newCode() {
     final r = Random.secure();
@@ -151,6 +168,7 @@ class Sync {
         Member(
           e.key as String,
           ((e.value as Map)['name'] ?? '') as String,
+          ((e.value as Map)['username'] ?? '') as String,
           _role((e.value as Map)['role']),
           (e.value as Map)['admin'] == true,
         ),
@@ -161,20 +179,37 @@ class Sync {
     return list;
   }
 
-  // --- creating and joining -----------------------------------------------
+  // --- family lifecycle ---------------------------------------------------
 
-  /// Creates a family with this phone as admin and returns its code.
-  static Future<String> createFamily(AppStore s, String name, Role role) async {
-    final uid = await _uid();
+  /// Creates a family with this account as admin and returns its code.
+  static Future<String> createFamily(
+    AppStore s, {
+    required String familyName,
+    required String name,
+    required String username,
+    required Role role,
+  }) async {
+    final uid = _myUid;
     for (var i = 0; i < 5; i++) {
       final code = _newCode();
-      if ((await _family(code).get().timeout(_timeout)).exists) continue;
+      try {
+        if ((await _family(code).get().timeout(_timeout)).exists) continue;
+      } on FirebaseException catch (e) {
+        // Someone else's family: the rules deny the read. Try another code.
+        if (e.code == 'permission-denied') continue;
+        rethrow;
+      }
       await _family(code).set({
+        'name': familyName,
         'adminUid': uid,
-        'adminName': name,
         'createdAt': DateTime.now().millisecondsSinceEpoch,
         'members': {
-          uid: {'name': name, 'role': role.name, 'admin': true},
+          uid: {
+            'name': name,
+            'username': username,
+            'role': role.name,
+            'admin': true,
+          },
         },
       }).timeout(_timeout);
       await _shared(code).set({
@@ -185,95 +220,129 @@ class Sync {
         'editedAt': DateTime.now().millisecondsSinceEpoch,
         'done': <String, dynamic>{},
       }).timeout(_timeout);
+      await _user(uid)
+          .set({'familyCode': code}, SetOptions(merge: true)).timeout(_timeout);
       s.setLastSeenRev(1);
       return code;
     }
     throw StateError('Could not create a family code');
   }
 
-  /// Asks the admin to let this phone in. Safe to call again while waiting.
-  static Future<({JoinResult result, String? adminName})> requestJoin(
-      String code, String name, Role role) async {
-    final uid = await _uid();
-    final snap = await _family(code).get().timeout(_timeout);
-    if (!snap.exists) return (result: JoinResult.notFound, adminName: null);
-    final data = snap.data()!;
-    final adminName = data['adminName'] as String?;
-    if (_parseMembers(data).any((m) => m.uid == uid)) {
-      return (result: JoinResult.alreadyMember, adminName: adminName);
-    }
-    await _requests(code)
-        .doc(uid)
-        .set({'name': name, 'role': role.name, 'at': DateTime.now().millisecondsSinceEpoch})
-        .timeout(_timeout);
-    return (result: JoinResult.pending, adminName: adminName);
+  /// Accepts an invitation and joins the family.
+  static Future<void> acceptInvite(
+      Invite inv, String name, String username) async {
+    final uid = _myUid;
+    await _family(inv.code).update({
+      'members.$uid': {
+        'name': name,
+        'username': username,
+        'role': inv.role.name,
+        'admin': false,
+      },
+    }).timeout(_timeout);
+    await _user(uid)
+        .set({'familyCode': inv.code}, SetOptions(merge: true)).timeout(_timeout);
+    try {
+      await _inbox(inv.key).doc(inv.code).delete();
+    } catch (_) {}
   }
 
-  /// Emits once the admin approves or declines this phone's request.
-  static Stream<Decision> watchDecision(String code) {
-    final controller = StreamController<Decision>();
-    StreamSubscription<void>? a, b;
-    controller.onListen = () async {
-      try {
-        final uid = await _uid();
-        var requestSeen = false;
-        a = _family(code).snapshots().listen((snap) {
-          final data = snap.data();
-          if (data != null && _parseMembers(data).any((m) => m.uid == uid)) {
-            controller.add(Decision.approved);
-          }
-        }, onError: (_) {});
-        b = _requests(code).doc(uid).snapshots().listen((snap) async {
-          if (snap.exists) {
-            requestSeen = true;
-          } else if (requestSeen) {
-            // Deleted: either approved (now a member) or declined.
-            final fam = await _family(code).get();
-            final isMember = fam.data() != null &&
-                _parseMembers(fam.data()!).any((m) => m.uid == uid);
-            controller.add(isMember ? Decision.approved : Decision.declined);
-          }
-        }, onError: (_) {});
-      } catch (_) {
-        controller.addError('offline');
+  static Future<void> declineInvite(Invite inv) =>
+      _inbox(inv.key).doc(inv.code).delete();
+
+  /// Leaves the family (members only; the admin cannot leave).
+  static Future<void> leaveFamily(String code) async {
+    final uid = _myUid;
+    await _family(code)
+        .update({'members.$uid': FieldValue.delete()}).timeout(_timeout);
+    await _user(uid)
+        .set({'familyCode': FieldValue.delete()}, SetOptions(merge: true));
+  }
+
+  /// Clears the family link on the account (e.g. after being removed).
+  static Future<void> clearFamilyLink() async {
+    try {
+      await _user(_myUid)
+          .set({'familyCode': FieldValue.delete()}, SetOptions(merge: true));
+    } catch (_) {}
+  }
+
+  // --- invitations --------------------------------------------------------
+
+  /// Invitations addressed to any of [keys] (the account's email/username).
+  static Stream<List<Invite>> watchInvites(List<String> keys) {
+    final controller = StreamController<List<Invite>>();
+    final latest = <String, List<Invite>>{};
+    final subs = <StreamSubscription<void>>[];
+    controller.onListen = () {
+      for (final key in keys) {
+        subs.add(_inbox(key).snapshots().listen((qs) {
+          latest[key] = [
+            for (final d in qs.docs)
+              Invite(
+                key,
+                d.id,
+                (d.data()['familyName'] ?? 'A family') as String,
+                _role(d.data()['role']),
+                (d.data()['invitedBy'] ?? '') as String,
+              ),
+          ];
+          controller.add([for (final l in latest.values) ...l]);
+        }, onError: (_) {}));
       }
     };
     controller.onCancel = () {
-      a?.cancel();
-      b?.cancel();
+      for (final s in subs) {
+        s.cancel();
+      }
     };
     return controller.stream;
   }
 
-  static Future<void> cancelRequest(String code) async {
-    try {
-      await _requests(code).doc(await _uid()).delete().timeout(_timeout);
-    } catch (_) {}
-  }
-
-  /// After approval: copy the shared menu onto this phone.
-  static Future<void> loadShared(AppStore s, String code) async {
-    final snap = await _shared(code).get().timeout(_timeout);
-    final data = snap.data();
-    if (data == null) return;
-    s.applyRemoteMenu(data['menu'] as String, data['rev'] as int? ?? 1);
-    await _mergeDone(s.prefs, data['done']);
-    await s.reloadDone();
-  }
-
-  // --- admin actions ------------------------------------------------------
-
-  static Future<void> approve(String code, JoinRequest r) async {
-    final batch = FirebaseFirestore.instance.batch();
-    batch.update(_family(code), {
-      'members.${r.uid}': {'name': r.name, 'role': r.role.name, 'admin': false},
+  /// Admin: invites an email address or a username with a role.
+  /// Throws [StateError] with a user-readable message on bad input.
+  static Future<String> invite({
+    required String code,
+    required String familyName,
+    required String input,
+    required Role role,
+    required String invitedBy,
+  }) async {
+    final key = inviteKey(input);
+    if (key.isEmpty) throw StateError('Enter an email or username');
+    if (isEmail(key)) {
+      if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(key)) {
+        throw StateError('That email address looks wrong');
+      }
+    } else if ((await _db.collection('usernames').doc(key).get()).exists ==
+        false) {
+      throw StateError('No user with the username "$key"');
+    }
+    if (members.value.any((m) => m.username == key)) {
+      throw StateError('That person is already in the family');
+    }
+    final batch = _db.batch();
+    final at = DateTime.now().millisecondsSinceEpoch;
+    batch.set(_inbox(key).doc(code), {
+      'familyName': familyName,
+      'role': role.name,
+      'invitedBy': invitedBy,
+      'at': at,
     });
-    batch.delete(_requests(code).doc(r.uid));
+    batch.set(_sentInvite(code, key), {'role': role.name, 'at': at});
+    await batch.commit();
+    return key;
+  }
+
+  static Future<void> cancelInvite(String code, String key) async {
+    final batch = _db.batch();
+    batch.delete(_inbox(key).doc(code));
+    batch.delete(_sentInvite(code, key));
     await batch.commit();
   }
 
-  static Future<void> decline(String code, JoinRequest r) =>
-      _requests(code).doc(r.uid).delete();
+  static Future<void> changeRole(String code, String uid, Role role) =>
+      _family(code).update({'members.$uid.role': role.name});
 
   static Future<void> removeMember(String code, String uid) =>
       _family(code).update({'members.$uid': FieldValue.delete()});
@@ -284,11 +353,10 @@ class Sync {
     final code = s.familyCode;
     if (!available || code == null) return;
     try {
-      final uid = await _uid();
       await _shared(code).set({
         'menu': s.menuToJson(),
         'rev': FieldValue.increment(1),
-        'editedById': uid,
+        'editedById': _myUid,
         'editedByName': s.myName,
         'editedAt': DateTime.now().millisecondsSinceEpoch,
       }, SetOptions(merge: true)).timeout(_timeout);
@@ -305,8 +373,7 @@ class Sync {
       final code = _familyCodeFrom(prefs);
       if (code == null) return;
       await init();
-      if (!available) return;
-      await _uid();
+      if (!available || FirebaseAuth.instance.currentUser == null) return;
       await _shared(code)
           .set({'done': {key: true}}, SetOptions(merge: true)).timeout(_timeout);
     } catch (_) {}
@@ -369,54 +436,59 @@ class Sync {
     return changes.length > 3 ? '$shown\n+${changes.length - 3} more' : shown;
   }
 
+  /// Copies this account's member entry (role, name, admin) onto the phone.
+  static void _syncMembership(
+      AppStore s, Map<String, dynamic> family, List<Member> list) {
+    final me = list.where((m) => m.uid == FirebaseAuth.instance.currentUser?.uid);
+    if (me.isEmpty) return;
+    s.syncMembership(
+      me.first.role,
+      me.first.name,
+      me.first.admin,
+      (family['name'] ?? '') as String,
+    );
+  }
+
   /// Live updates while the app is open.
   static SyncSession? listen(
     AppStore s, {
     required void Function(String who, String summary) onRemoteEdit,
-    required void Function(String name) onJoinRequest,
     required VoidCallback onRemoved,
   }) {
     final code = s.familyCode;
-    if (!available || code == null) return null;
+    if (!available || code == null || FirebaseAuth.instance.currentUser == null) {
+      return null;
+    }
     final session = SyncSession();
-    () async {
-      try {
-        final uid = await _uid();
-        if (session.cancelled) return;
+    final uid = _myUid;
 
-        session.add(_family(code).snapshots().listen((snap) {
-          final data = snap.data();
-          if (data == null) return;
-          final list = _parseMembers(data);
-          members.value = list;
-          if (!snap.metadata.isFromCache && !list.any((m) => m.uid == uid)) {
-            onRemoved();
-          }
-        }, onError: (_) {}));
+    session.add(_family(code).snapshots().listen((snap) {
+      final data = snap.data();
+      if (data == null) return;
+      final list = _parseMembers(data);
+      members.value = list;
+      if (!snap.metadata.isFromCache && !list.any((m) => m.uid == uid)) {
+        onRemoved();
+      } else {
+        _syncMembership(s, data, list);
+      }
+    }, onError: (_) {}));
 
-        session.add(_shared(code).snapshots().listen((snap) async {
-          final data = snap.data();
-          if (data == null) return;
-          final change = await _apply(s, data);
-          if (change != null) onRemoteEdit(change.who, change.summary);
-        }, onError: (_) {}));
+    session.add(_shared(code).snapshots().listen((snap) async {
+      final data = snap.data();
+      if (data == null) return;
+      final change = await _apply(s, data);
+      if (change != null) onRemoteEdit(change.who, change.summary);
+    }, onError: (_) {}));
 
-        if (s.isAdmin) {
-          session.add(_requests(code).snapshots().listen((qs) {
-            final list = [
-              for (final d in qs.docs)
-                JoinRequest(d.id, (d.data()['name'] ?? '') as String,
-                    _role(d.data()['role'])),
-            ];
-            final known = requests.value.map((r) => r.uid).toSet();
-            requests.value = list;
-            for (final r in list.where((r) => !known.contains(r.uid))) {
-              onJoinRequest(r.name);
-            }
-          }, onError: (_) {}));
-        }
-      } catch (_) {}
-    }();
+    if (s.isAdmin) {
+      session.add(_family(code).collection('invites').snapshots().listen((qs) {
+        pendingInvites.value = [
+          for (final d in qs.docs)
+            PendingInvite(d.id, _role(d.data()['role'])),
+        ];
+      }, onError: (_) {}));
+    }
     return session;
   }
 
@@ -431,17 +503,22 @@ class Sync {
     final code = store.familyCode;
     if (code != null) {
       await init();
-      if (available) {
-        final uid = await _uid();
+      if (available && FirebaseAuth.instance.currentUser != null) {
+        final uid = _myUid;
         final fam = (await _family(code).get().timeout(_timeout)).data();
-        if (fam != null && !_parseMembers(fam).any((m) => m.uid == uid)) {
-          // The admin removed this phone from the family.
-          store.resetProfile();
-          await stopBackground();
-          await Notifier.instance.showNow('Removed from family',
-              'The admin removed you. Open the app to join again.',
-              id: 996);
-          return;
+        if (fam != null) {
+          final list = _parseMembers(fam);
+          if (!list.any((m) => m.uid == uid)) {
+            // The admin removed this account from the family.
+            store.resetProfile();
+            await clearFamilyLink();
+            await stopBackground();
+            await Notifier.instance.showNow('Removed from family',
+                'The admin removed you. Open the app to continue.',
+                id: 996);
+            return;
+          }
+          _syncMembership(store, fam, list);
         }
 
         final data = (await _shared(code).get().timeout(_timeout)).data();
@@ -455,28 +532,9 @@ class Sync {
             );
           }
         }
-
-        if (store.isAdmin) await _notifyNewRequests(prefs, code);
       }
     }
     // Keeps the 7-day window of reminders full and in line with the menu.
     await Notifier.instance.reschedule(store);
-  }
-
-  static Future<void> _notifyNewRequests(
-      SharedPreferences prefs, String code) async {
-    final seen = (prefs.getStringList('notified_requests') ?? []).toSet();
-    final qs = await _requests(code).get().timeout(_timeout);
-    final current = qs.docs.map((d) => d.id).toSet();
-    var n = 0;
-    for (final d in qs.docs) {
-      if (seen.contains(d.id)) continue;
-      await Notifier.instance.showNow(
-        'Join request',
-        '${d.data()['name'] ?? 'Someone'} wants to join your family.',
-        id: 900 + n++,
-      );
-    }
-    await prefs.setStringList('notified_requests', current.toList());
   }
 }

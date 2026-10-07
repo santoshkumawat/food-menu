@@ -1,3 +1,4 @@
+import 'package:aaj_kya_banega/account.dart';
 import 'package:aaj_kya_banega/main.dart';
 import 'package:aaj_kya_banega/store.dart';
 import 'package:aaj_kya_banega/tasks.dart';
@@ -12,14 +13,14 @@ void main() {
 
   testWidgets('first run shows role setup', (tester) async {
     final store = await newStore();
-    await tester.pumpWidget(App(store: store));
+    await tester.pumpWidget(App(store: store, session: Session(store)));
     expect(find.text('Who is using this phone?'), findsOneWidget);
   });
 
   testWidgets('cook sees today checklist and meals', (tester) async {
     final store = await newStore();
     store.setProfile(Role.cook, 'Test', null);
-    await tester.pumpWidget(App(store: store));
+    await tester.pumpWidget(App(store: store, session: Session(store)));
     expect(find.text('Your checklist'), findsOneWidget);
     expect(find.textContaining('Breakfast'), findsWidgets);
   });

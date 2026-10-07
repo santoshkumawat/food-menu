@@ -1,17 +1,18 @@
-import 'dart:async';
-
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'account.dart';
+import 'auth_screens.dart';
 import 'notifications.dart';
 import 'store.dart';
 import 'sync.dart';
 import 'tasks.dart';
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key, required this.store});
+  const HomeShell({super.key, required this.store, required this.session});
   final AppStore store;
+  final Session session;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -54,11 +55,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _session = Sync.listen(
       _store,
       onRemoteEdit: (who, summary) => _snack('Menu updated by $who\n$summary'),
-      onJoinRequest: (name) => _snack('$name wants to join your family'),
-      onRemoved: () {
-        Sync.stopBackground();
+      onRemoved: () async {
+        await Sync.stopBackground();
+        await Sync.clearFamilyLink();
         _store.resetProfile();
         _snack('You were removed from the family');
+        widget.session.retry();
       },
     );
   }
@@ -69,17 +71,38 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) _store.reload();
   }
 
+  /// The sign-in / onboarding screen to show, or null for the main app.
+  Widget? _gate() {
+    final session = widget.session;
+    if (!Sync.available) {
+      return _store.isSetUp ? null : SetupPage(store: _store);
+    }
+    return switch (session.state) {
+      AuthState.loading =>
+        const Scaffold(body: Center(child: CircularProgressIndicator())),
+      AuthState.offline => OfflinePage(session: session),
+      AuthState.signedOut => AuthPage(session: session),
+      AuthState.unverified => VerifyPage(session: session),
+      AuthState.needsProfile => ProfilePage(session: session),
+      AuthState.noFamily => FamilyStartPage(session: session),
+      AuthState.ready => _store.isSetUp
+          ? null
+          : const Scaffold(body: Center(child: CircularProgressIndicator())),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: _store,
+      listenable: Listenable.merge([_store, widget.session]),
       builder: (context, _) {
-        if (!_store.isSetUp) return SetupPage(store: _store);
+        final gate = _gate();
+        if (gate != null) return gate;
         final pages = [
           TodayPage(store: _store),
           WeekPage(store: _store),
           HealthPage(store: _store),
-          SettingsPage(store: _store),
+          SettingsPage(store: _store, session: widget.session),
         ];
         return Scaffold(
           appBar: AppBar(title: const Text('Aaj Kya Banega?')),
@@ -129,6 +152,7 @@ Future<String?> _askText(BuildContext context, String title, String initial,
 
 // --- first-run setup ------------------------------------------------------
 
+/// Used only when Firebase is not set up: the app runs on this phone alone.
 class SetupPage extends StatefulWidget {
   const SetupPage({super.key, required this.store});
   final AppStore store;
@@ -140,114 +164,12 @@ class SetupPage extends StatefulWidget {
 class _SetupPageState extends State<SetupPage> {
   Role? _role;
   final _name = TextEditingController();
-  final _code = TextEditingController();
-  bool _busy = false;
-  String? _error;
-
-  /// Set while waiting for the admin to answer a join request.
-  String? _waitingFor;
-  String? _pendingCode;
-  StreamSubscription<Decision>? _decisionSub;
 
   @override
   void dispose() {
-    _decisionSub?.cancel();
     _name.dispose();
-    _code.dispose();
     super.dispose();
   }
-
-  String get _displayName => _name.text.trim().isEmpty
-      ? (_role == Role.cook ? 'Cook' : 'Me')
-      : _name.text.trim();
-
-  Future<void> _run(Future<void> Function() job) async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await job();
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error =
-            'Could not reach the server. Check the internet and try again.');
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _create() => _run(() async {
-        final code =
-            await Sync.createFamily(widget.store, _displayName, _role!);
-        widget.store.setProfile(_role!, _displayName, code, admin: true);
-        await Sync.startBackground();
-      });
-
-  Future<void> _join() => _run(() async {
-        final code = _code.text.trim().toUpperCase();
-        final r = await Sync.requestJoin(code, _displayName, _role!);
-        switch (r.result) {
-          case JoinResult.notFound:
-            setState(() => _error = 'No family found with that code.');
-          case JoinResult.alreadyMember:
-            await _enter(code);
-          case JoinResult.pending:
-            setState(() {
-              _waitingFor = r.adminName ?? 'the admin';
-              _pendingCode = code;
-            });
-            _decisionSub?.cancel();
-            _decisionSub = Sync.watchDecision(code).listen((d) async {
-              _decisionSub?.cancel();
-              if (d == Decision.approved) {
-                await _enter(code);
-              } else if (mounted) {
-                setState(() {
-                  _waitingFor = null;
-                  _error = 'The admin declined your request.';
-                });
-              }
-            });
-        }
-      });
-
-  Future<void> _enter(String code) async {
-    await Sync.loadShared(widget.store, code);
-    widget.store.setProfile(_role!, _displayName, code);
-    await Sync.startBackground();
-  }
-
-  Future<void> _cancelWaiting() async {
-    _decisionSub?.cancel();
-    final code = _pendingCode;
-    if (code != null) await Sync.cancelRequest(code);
-    if (mounted) setState(() => _waitingFor = null);
-  }
-
-  void _localOnly() => widget.store.setProfile(_role!, _displayName, null);
-
-  Widget _waiting() => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              Text('Waiting for $_waitingFor to approve you...',
-                  style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              const Text(
-                  'You can close the app. Come back and enter the same code once approved.'),
-              const SizedBox(height: 8),
-              TextButton(
-                  onPressed: _cancelWaiting,
-                  child: const Text('Cancel request')),
-            ],
-          ),
-        ),
-      );
 
   @override
   Widget build(BuildContext context) {
@@ -256,80 +178,40 @@ class _SetupPageState extends State<SetupPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (_waitingFor != null)
-            _waiting()
-          else ...[
-            Text('Who is using this phone?',
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            RadioGroup<Role>(
-              groupValue: _role,
-              onChanged: (v) => setState(() => _role = v),
-              child: Column(
-                children: [
-                  for (final r in Role.values)
-                    RadioListTile<Role>(value: r, title: Text(r.label)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(
-                labelText: 'Your name (shown to the family)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            if (_role != null) ...[
-              const SizedBox(height: 24),
-              if (Sync.available) ...[
-                FilledButton(
-                  onPressed: _busy ? null : _create,
-                  child: const Text('Start a new family (you become admin)'),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _code,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                    labelText: 'Family code from the admin',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                FilledButton.tonal(
-                  onPressed: _busy ? null : _join,
-                  child: const Text('Ask to join this family'),
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: _busy ? null : _localOnly,
-                  child: const Text('Use on this phone only (no sharing)'),
-                ),
-              ] else ...[
-                const Text(
-                  'Sharing between phones is not set up in this build '
-                  '(google-services.json is missing), so the menu stays on this phone.',
-                ),
-                const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: _localOnly,
-                  child: const Text('Continue on this phone'),
-                ),
+          Text('Who is using this phone?',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          RadioGroup<Role>(
+            groupValue: _role,
+            onChanged: (v) => setState(() => _role = v),
+            child: Column(
+              children: [
+                for (final r in Role.values)
+                  RadioListTile<Role>(value: r, title: Text(r.label)),
               ],
-            ],
-          ],
-          if (_busy)
-            const Padding(
-              padding: EdgeInsets.only(top: 16),
-              child: Center(child: CircularProgressIndicator()),
             ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: Text(_error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(
+              labelText: 'Your name',
+              border: OutlineInputBorder(),
             ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Sharing between phones is not set up in this build '
+            '(google-services.json is missing), so the menu stays on this phone.',
+          ),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: _role == null
+                ? null
+                : () => widget.store.setProfile(
+                    _role!, _name.text.trim().isEmpty ? 'Me' : _name.text, null),
+            child: const Text('Continue on this phone'),
+          ),
         ],
       ),
     );
@@ -587,8 +469,11 @@ class HealthPage extends StatelessWidget {
 }
 
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key, required this.store});
+  const SettingsPage({super.key, required this.store, this.session});
   final AppStore store;
+
+  /// Null when running without accounts (Firebase not set up).
+  final Session? session;
 
   Future<void> _pick(BuildContext context, bool weekend, Task task) async {
     final day = weekend ? DateTime.saturday : DateTime.monday;
@@ -624,125 +509,242 @@ class SettingsPage extends StatelessWidget {
   }
 
   List<Widget> _familySection(BuildContext context, String? code) {
-    if (code == null) {
-      return const [
-        ListTile(
-          leading: Icon(Icons.phone_android),
-          title: Text('This phone only'),
-          subtitle: Text('The menu is not shared with another phone'),
-        ),
-      ];
-    }
+    final s = session;
     final admin = store.isAdmin;
     return [
-      if (admin) ...[
+      if (s != null)
         ListTile(
-          leading: const Icon(Icons.vpn_key_outlined),
-          title: Text('Family code: $code'),
-          subtitle: const Text('People who enter it must be approved by you'),
-          trailing: IconButton(
-            icon: const Icon(Icons.copy),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: code));
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(const SnackBar(content: Text('Code copied')));
-            },
+          leading: const Icon(Icons.account_circle_outlined),
+          title: Text(s.name),
+          subtitle: Text('@${s.username}\n${s.email}'),
+          isThreeLine: true,
+          trailing: TextButton(
+            onPressed: () => _confirm(
+              context,
+              'Sign out?',
+              'You will need to sign in again to use the app.',
+              'Sign out',
+              s.signOut,
+            ),
+            child: const Text('Sign out'),
           ),
         ),
+      if (code == null)
+        const ListTile(
+          leading: Icon(Icons.phone_android),
+          title: Text('This phone only'),
+          subtitle: Text('The menu is not shared with anyone'),
+        )
+      else ...[
         ListTile(
-          leading: const Icon(Icons.person_add_alt_1_outlined),
-          title: const Text('Invite someone'),
-          subtitle: const Text('Share the family code'),
-          onTap: () => SharePlus.instance.share(ShareParams(
-            text: 'Join my family on Aaj Kya Banega? '
-                'Open the app, choose "Ask to join this family" and enter this code: $code. '
-                "I'll approve you.",
-          )),
+          leading: const Icon(Icons.group_outlined),
+          title: Text(store.familyName.isEmpty ? 'Family' : store.familyName),
+          subtitle: Text(
+              'Your role: ${store.role!.label}${admin ? ' (Admin)' : ''}'),
         ),
-        ValueListenableBuilder<List<JoinRequest>>(
-          valueListenable: Sync.requests,
-          builder: (context, list, _) => Column(
-            children: [
-              for (final r in list)
-                Card(
-                  color: Theme.of(context).colorScheme.tertiaryContainer,
-                  child: ListTile(
-                    leading: const Icon(Icons.how_to_reg_outlined),
-                    title: Text('${r.name} wants to join'),
-                    subtitle: Text(r.role.label),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          tooltip: 'Decline',
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Sync.decline(code, r),
-                        ),
-                        IconButton(
-                          tooltip: 'Allow',
-                          icon: const Icon(Icons.check, color: Colors.green),
-                          onPressed: () => Sync.approve(code, r),
-                        ),
-                      ],
+        if (admin) ...[
+          ListTile(
+            leading: const Icon(Icons.person_add_alt_1_outlined),
+            title: const Text('Invite someone'),
+            subtitle: const Text('By email or username'),
+            onTap: () => _inviteDialog(context, code),
+          ),
+          ValueListenableBuilder<List<PendingInvite>>(
+            valueListenable: Sync.pendingInvites,
+            builder: (context, list, _) => Column(
+              children: [
+                for (final p in list)
+                  ListTile(
+                    leading: const Icon(Icons.mail_outline),
+                    title: Text(p.key),
+                    subtitle: Text('Invited as ${p.role.label} - waiting'),
+                    trailing: IconButton(
+                      tooltip: 'Cancel invite',
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Sync.cancelInvite(code, p.key),
                     ),
                   ),
-                ),
+              ],
+            ),
+          ),
+        ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Text('Family members',
+              style: Theme.of(context).textTheme.titleSmall),
+        ),
+        ValueListenableBuilder<List<Member>>(
+          valueListenable: Sync.members,
+          builder: (context, list, _) => Column(
+            children: [
+              for (final m in list) _memberTile(context, code, m, admin),
+              if (list.isEmpty)
+                const ListTile(
+                    dense: true,
+                    title: Text('Loading members... (needs internet)')),
             ],
           ),
         ),
+        if (!admin && s != null)
+          ListTile(
+            leading: const Icon(Icons.exit_to_app),
+            title: const Text('Leave family'),
+            onTap: () => _confirm(
+              context,
+              'Leave ${store.familyName}?',
+              'You will stop getting its menu and reminders. The admin can invite you again.',
+              'Leave',
+              s.leaveFamily,
+            ),
+          ),
       ],
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-        child: Text('Family members',
-            style: Theme.of(context).textTheme.titleSmall),
-      ),
-      ValueListenableBuilder<List<Member>>(
-        valueListenable: Sync.members,
-        builder: (context, list, _) => Column(
-          children: [
-            for (final m in list)
-              ListTile(
-                leading: Icon(m.admin
-                    ? Icons.admin_panel_settings_outlined
-                    : Icons.person_outline),
-                title: Text(m.name.isEmpty ? m.role.label : m.name),
-                subtitle: Text('${m.role.label}${m.admin ? ' - Admin' : ''}'),
-                trailing: (admin && !m.admin)
-                    ? IconButton(
-                        tooltip: 'Remove',
-                        icon: const Icon(Icons.person_remove_outlined),
-                        onPressed: () => _confirmRemove(context, code, m),
-                      )
-                    : null,
-              ),
-            if (list.isEmpty)
-              const ListTile(
-                  dense: true, title: Text('Loading members... (needs internet)')),
-          ],
-        ),
-      ),
     ];
   }
 
-  Future<void> _confirmRemove(
-      BuildContext context, String code, Member m) async {
+  Widget _memberTile(BuildContext context, String code, Member m, bool admin) {
+    final isMe = m.uid == FirebaseAuth.instance.currentUser?.uid;
+    return ListTile(
+      leading: Icon(m.admin
+          ? Icons.admin_panel_settings_outlined
+          : Icons.person_outline),
+      title: Text('${m.name.isEmpty ? m.username : m.name}${isMe ? ' (you)' : ''}'),
+      subtitle: Text(
+          '@${m.username} - ${m.role.label}${m.admin ? ' - Admin' : ''}'),
+      trailing: admin
+          ? PopupMenuButton<String>(
+              onSelected: (v) async {
+                if (v == 'remove') {
+                  _confirm(
+                    context,
+                    'Remove ${m.name}?',
+                    'They will lose access to the shared menu and its reminders.',
+                    'Remove',
+                    () => Sync.removeMember(code, m.uid),
+                  );
+                } else {
+                  await Sync.changeRole(code, m.uid, Role.values.byName(v));
+                }
+              },
+              itemBuilder: (_) => [
+                for (final r in Role.values)
+                  if (r != m.role)
+                    PopupMenuItem(value: r.name, child: Text('Make ${r.label}')),
+                if (!m.admin)
+                  const PopupMenuItem(value: 'remove', child: Text('Remove from family')),
+              ],
+            )
+          : null,
+    );
+  }
+
+  Future<void> _confirm(BuildContext context, String title, String body,
+      String action, Future<void> Function() onYes) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Remove ${m.name}?'),
-        content: const Text(
-            'They will lose access to the shared menu and stop getting its reminders.'),
+        title: Text(title),
+        content: Text(body),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Remove')),
+              onPressed: () => Navigator.pop(ctx, true), child: Text(action)),
         ],
       ),
     );
-    if (ok == true) await Sync.removeMember(code, m.uid);
+    if (ok == true) await onYes();
+  }
+
+  Future<void> _inviteDialog(BuildContext context, String code) async {
+    final input = TextEditingController();
+    var role = Role.me;
+    String? error;
+    var busy = false;
+    final key = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Invite someone'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: input,
+                  autofocus: true,
+                  autocorrect: false,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                      labelText: 'Email or username',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                const Text('Their role:'),
+                RadioGroup<Role>(
+                  groupValue: role,
+                  onChanged: (v) => setState(() => role = v ?? role),
+                  child: Column(
+                    children: [
+                      for (final r in Role.values)
+                        RadioListTile<Role>(
+                            dense: true, value: r, title: Text(r.label)),
+                    ],
+                  ),
+                ),
+                if (error != null)
+                  Text(error!,
+                      style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      setState(() {
+                        busy = true;
+                        error = null;
+                      });
+                      try {
+                        final k = await Sync.invite(
+                          code: code,
+                          familyName: store.familyName,
+                          input: input.text,
+                          role: role,
+                          invitedBy: store.myName,
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx, k);
+                      } catch (e) {
+                        setState(() {
+                          busy = false;
+                          error = errorMessage(e);
+                        });
+                      }
+                    },
+              child: const Text('Invite'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (key == null || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Invited $key. They will see it after signing in.'),
+      action: SnackBarAction(
+        label: 'Tell them',
+        onPressed: () => SharePlus.instance.share(ShareParams(
+          text: 'I invited you to "${store.familyName}" on Aaj Kya Banega. '
+              'Install the app, sign up or log in with ${isEmail(key) ? 'this email: $key' : 'the username: $key'}, '
+              'and accept the invitation.',
+        )),
+      ),
+    ));
   }
 
   @override
@@ -751,15 +753,16 @@ class SettingsPage extends StatelessWidget {
     final code = store.familyCode;
     return ListView(
       children: [
-        ListTile(
-          leading: const Icon(Icons.person_outline),
-          title: Text(store.myName.isEmpty ? role.label : store.myName),
-          subtitle: Text(role.label),
-          trailing: TextButton(
-            onPressed: () => _confirmReset(context),
-            child: const Text('Change'),
+        if (session == null)
+          ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: Text(store.myName.isEmpty ? role.label : store.myName),
+            subtitle: Text(role.label),
+            trailing: TextButton(
+              onPressed: () => _confirmReset(context),
+              child: const Text('Change'),
+            ),
           ),
-        ),
         ..._familySection(context, code),
         const Divider(),
         SwitchListTile(

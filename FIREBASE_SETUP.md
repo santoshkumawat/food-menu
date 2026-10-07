@@ -1,8 +1,8 @@
 # Firebase setup (one time, free plan)
 
-Without this the app works on a single phone. With it, family members share
-the menu and the "done" ticks. The first phone to start a family is the
-**admin**. Everyone else must ask to join and the admin approves or declines.
+Without this the app works on a single phone. With it, people sign in with
+email and password, create a family or accept an invitation, and share the
+menu and the "done" ticks.
 
 ## 1. Create the project
 1. Open https://console.firebase.google.com and sign in with your Google account.
@@ -15,73 +15,43 @@ the menu and the "done" ticks. The first phone to start a family is the
 3. Download `google-services.json` and put it in `android/app/`.
    It is git-ignored, so it is not pushed to GitHub.
 
-## 3. Turn on anonymous sign-in
-The app signs each phone in quietly (no email or password) so the server can
-tell who is the admin.
+## 3. Turn on email + password sign-in
 1. **Build -> Authentication -> Get started**.
-2. **Sign-in method** tab -> **Anonymous** -> **Enable** -> **Save**.
+2. **Sign-in method** tab -> **Email/Password** -> turn on the first switch
+   (leave "Email link" off) -> **Save**.
+3. Optional: **Templates** tab -> edit the "Email address verification" and
+   "Password reset" emails (sender name, wording).
 
-## 4. Create the database
+## 4. Create the database and paste the rules
 1. **Build -> Firestore Database -> Create database** (Standard edition).
 2. Location near you (for example `asia-south1`), **Production mode**.
-3. Open the **Rules** tab, replace everything with the rules below, **Publish**.
+3. Open the **Rules** tab, replace everything with the contents of
+   `firestore.rules` (in this folder), then **Publish**.
+4. Optional check: in the Rules tab use **Rules Playground** to confirm a
+   signed-out request to `/families/ABC` is denied.
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function family(code) {
-      return get(/databases/$(database)/documents/families/$(code)).data;
-    }
-    function isAdmin(code) {
-      return signedIn() && family(code).adminUid == request.auth.uid;
-    }
-    function isMember(code) {
-      return signedIn() && request.auth.uid in family(code).members;
-    }
-
-    match /families/{code} {
-      allow get: if signedIn();
-      allow create: if signedIn()
-        && request.resource.data.adminUid == request.auth.uid
-        && request.resource.data.members.keys().hasOnly([request.auth.uid]);
-      allow update: if isAdmin(code);
-      allow list, delete: if false;
-
-      // People waiting for approval
-      match /requests/{uid} {
-        allow create: if signedIn() && request.auth.uid == uid;
-        allow get: if signedIn() && (request.auth.uid == uid || isAdmin(code));
-        allow list: if isAdmin(code);
-        allow delete: if signedIn() && (request.auth.uid == uid || isAdmin(code));
-        allow update: if false;
-      }
-
-      // The menu and done ticks: members only
-      match /shared/{doc} {
-        allow read, write: if isMember(code);
-      }
-    }
-  }
-}
-```
-
-## 5. Use it
-1. First phone: pick the role, enter a name, tap **Start a new family**.
-   You are the admin. Settings shows the family code.
-2. Other phones: pick the role, enter a name and the code, tap
-   **Ask to join this family**. The admin gets a notification and approves
-   in **Settings -> Join requests**.
-3. The admin can **Invite someone** (shares the code), see all members, and
-   **remove** a member at any time.
+## How the app works
+- **Sign up** with email + password. A verification email is sent; the app
+  waits until you tap its link (this keeps invitations to an email address
+  safe). Then you choose your name and a unique **username**.
+- **Create a family** (you become the **admin** and pick your own role), or
+  accept an **invitation** waiting for your email or username.
+- **Admin** (Settings): invite by email or username and assign a role (Cook or
+  Me), change anyone's role, remove members, cancel pending invitations.
+- **Members** can see who is in the family and can leave it. The admin cannot
+  leave.
+- Firebase's free plan cannot send the invitation email itself. After
+  inviting, tap **Tell them** to share a message (WhatsApp etc.). The invited
+  person sees the invitation after signing up or logging in with that email
+  or username.
 
 ## Notes
 - Menu edits show up on other phones within about 15 minutes if the app is
   closed (Android decides the exact timing), and instantly if it is open.
-- The admin is tied to the phone's app data. Clearing the app's data or
-  uninstalling it loses admin rights; start a new family in that case.
-- A non-admin who uses **Change** in Settings only leaves on their own phone;
-  the admin can remove them from the list.
+- Accounts survive reinstalling the app or changing phones: sign in again and
+  you are back in your family, as admin if you were.
 - Samsung/Xiaomi/Oppo/Vivo phones delay background work. Set the app to
   **Unrestricted** battery use on every phone.
+- The rules were written without a test emulator. If something shows
+  "Not allowed", check the **Rules** tab for errors and use the Rules
+  Playground, then tell me what it says.
