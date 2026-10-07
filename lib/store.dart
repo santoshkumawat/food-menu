@@ -301,13 +301,17 @@ class AppStore extends ChangeNotifier {
     try {
       final j = jsonDecode(raw) as Map<String, dynamic>;
       _menuFromJson(j['menu'] as Map<String, dynamic>);
-      (j['times'] as Map<String, dynamic>? ?? {})
-          .forEach((k, v) => _taskTimes[k] = v as int);
+      // Older builds saved the second role as `me` / `meBreakfast`, etc.
+      (j['times'] as Map<String, dynamic>? ?? {}).forEach((k, v) =>
+          _taskTimes[k.replaceFirst(RegExp(r'_me(?=[A-Z])'), '_member')] =
+              v as int);
       notificationsOn = j['on'] as bool? ?? true;
       medicines = List<String>.from(j['medicines'] ?? []);
       guidelines = List<String>.from(j['guidelines'] ?? []);
       final r = j['role'] as String?;
-      role = r == null ? null : Role.values.asNameMap()[r];
+      role = r == null
+          ? null
+          : Role.values.asNameMap()[r == 'me' ? 'familyMember' : r];
       myName = j['name'] as String? ?? '';
       familyCode = j['family'] as String?;
       isAdmin = j['admin'] as bool? ?? false;

@@ -1108,7 +1108,7 @@ class SettingsPage extends StatelessWidget {
 
   Future<void> _inviteDialog(BuildContext context, String code) async {
     final input = TextEditingController();
-    var role = Role.me;
+    var role = Role.familyMember;
     String? error;
     var busy = false;
     final key = await showDialog<String>(

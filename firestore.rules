@@ -103,7 +103,7 @@ service cloud.firestore {
         && ((verified() && key == myEmail()) || key == myUsername() || isAdmin(code));
       allow create: if isAdmin(code)
         && request.resource.data.keys().hasOnly(['familyName', 'role', 'invitedBy', 'at'])
-        && request.resource.data.role in ['cook', 'me'];
+        && request.resource.data.role in ['cook', 'familyMember'];
       allow delete: if signedIn()
         && ((verified() && key == myEmail()) || key == myUsername() || isAdmin(code));
       allow update: if false;

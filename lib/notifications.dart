@@ -187,16 +187,16 @@ class Notifier {
           body: 'Dry fruits for tomorrow morning.',
           doneLabel: 'Soaked',
         );
-      case Task.meWater:
+      case Task.memberWater:
         return (
           title: 'Morning routine',
           body: _or(d(Slot.morning), 'Time for your morning routine'),
           doneLabel: '',
         );
-      case Task.meBreakfast:
-      case Task.meLunch:
-      case Task.meSnack:
-      case Task.meDinner:
+      case Task.memberBreakfast:
+      case Task.memberLunch:
+      case Task.memberSnack:
+      case Task.memberDinner:
         final text = d(task.slot!);
         if (text.isEmpty) return null;
         return (
@@ -204,7 +204,7 @@ class Notifier {
           body: text,
           doneLabel: '',
         );
-      case Task.meMilk:
+      case Task.memberMilk:
         return (
           title: 'Turmeric milk',
           body: _or(d(Slot.night), 'Time for your bedtime milk'),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:aaj_kya_banega/account.dart';
 import 'package:aaj_kya_banega/main.dart';
 import 'package:aaj_kya_banega/store.dart';
@@ -33,7 +35,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final store = await newStore();
-    store.setProfile(Role.me, 'Test', null);
+    store.setProfile(Role.familyMember, 'Test', null);
     await tester.pumpWidget(App(store: store, session: Session(store)));
 
     // Today: the cook's checklist is not shown for the Family member role.
@@ -96,11 +98,11 @@ void main() {
 
   test('reminder times are saved only when the member sets them', () async {
     final store = await newStore();
-    store.setTaskTime(false, Task.meBreakfast, 10 * 60);
+    store.setTaskTime(false, Task.memberBreakfast, 10 * 60);
     final again = AppStore(store.prefs);
-    expect(again.taskTime(Task.meBreakfast, DateTime.tuesday), 10 * 60);
-    expect(again.taskTime(Task.meBreakfast, DateTime.sunday), isNull);
-    again.clearTaskTime(false, Task.meBreakfast);
+    expect(again.taskTime(Task.memberBreakfast, DateTime.tuesday), 10 * 60);
+    expect(again.taskTime(Task.memberBreakfast, DateTime.sunday), isNull);
+    again.clearTaskTime(false, Task.memberBreakfast);
     expect(again.hasAnyTaskTime, isFalse);
   });
 
@@ -131,10 +133,23 @@ void main() {
 
   test('roles are called Cook and Family member', () {
     expect(Role.cook.shortName, 'Cook');
-    expect(Role.me.shortName, 'Family member');
-    expect(Role.me.label, startsWith('Family member'));
-    // Saved data and Firestore keep using the stable internal names.
-    expect(Role.me.name, 'me');
+    expect(Role.familyMember.shortName, 'Family member');
+    expect(Role.familyMember.label, startsWith('Family member'));
+    // These names are what gets saved on the phone and in Firestore.
+    expect(Role.familyMember.name, 'familyMember');
     expect(Role.cook.name, 'cook');
+  });
+
+  test('data saved by an older build (role "me") still loads', () async {
+    SharedPreferences.setMockInitialValues({
+      'store_v1': jsonEncode({
+        'menu': <String, dynamic>{},
+        'role': 'me',
+        'times': {'0_meBreakfast': 600},
+      }),
+    });
+    final store = AppStore(await SharedPreferences.getInstance());
+    expect(store.role, Role.familyMember);
+    expect(store.taskTime(Task.memberBreakfast, DateTime.monday), 600);
   });
 }

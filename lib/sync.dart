@@ -78,7 +78,7 @@ class SyncSession {
   }
 }
 
-Role _role(Object? v) => Role.values.asNameMap()[v] ?? Role.me;
+Role _role(Object? v) => Role.values.asNameMap()[v] ?? Role.familyMember;
 
 bool isEmail(String s) => s.contains('@');
 

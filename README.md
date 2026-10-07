@@ -51,8 +51,9 @@ Built with Flutter. Data and sign-in run on Firebase's free plan.
 
 ## Roles in the code
 
-The role values are saved as `cook` and `me` (stored data and Firestore rely on
-them). The second role is displayed as **Family member**.
+There are two roles, saved as `cook` and `familyMember` on the phone and in
+Firestore (`Role` in `lib/tasks.dart`). They are displayed as **Cook** and
+**Family member**. The security rules accept only those two values.
 
 ## Getting started
 

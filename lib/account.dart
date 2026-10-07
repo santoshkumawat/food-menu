@@ -83,7 +83,7 @@ class Session extends ChangeNotifier {
         final me = (fam?['members'] as Map?)?[user.uid] as Map?;
         if (me != null) {
           store.setProfile(
-            Role.values.asNameMap()[me['role']] ?? Role.me,
+            Role.values.asNameMap()[me['role']] ?? Role.familyMember,
             (me['name'] ?? name) as String,
             code,
             admin: me['admin'] == true,

@@ -2,10 +2,10 @@ import 'store.dart';
 
 /// Who is using this phone.
 enum Role {
-  // The enum names are stored in saved data and on the server, so they stay
-  // `cook` and `me`; only the display names below are user-facing.
+  // The enum names (`cook`, `familyMember`) are what gets saved on the phone
+  // and in Firestore; the strings below are what people see.
   cook('Cook', 'Cook (makes the food)'),
-  me('Family member', 'Family member (eats and plans the menu)');
+  familyMember('Family member', 'Family member (eats and plans the menu)');
 
   const Role(this.shortName, this.label);
 
@@ -24,13 +24,13 @@ enum Task {
   cookDinner(Role.cook, 'Tonight\'s dinner'),
   cookSoak(Role.cook, 'Soak dry fruits for tomorrow'),
   cookSoakFollow(Role.cook, 'Soaking follow-up'),
-  // Me
-  meWater(Role.me, 'Morning routine'),
-  meBreakfast(Role.me, 'Breakfast'),
-  meLunch(Role.me, 'Lunch'),
-  meSnack(Role.me, 'Snacks'),
-  meDinner(Role.me, 'Dinner'),
-  meMilk(Role.me, 'Turmeric milk');
+  // Family member
+  memberWater(Role.familyMember, 'Morning routine'),
+  memberBreakfast(Role.familyMember, 'Breakfast'),
+  memberLunch(Role.familyMember, 'Lunch'),
+  memberSnack(Role.familyMember, 'Snacks'),
+  memberDinner(Role.familyMember, 'Dinner'),
+  memberMilk(Role.familyMember, 'Turmeric milk');
 
   const Task(this.role, this.label);
 
@@ -48,12 +48,12 @@ enum Task {
 
   /// The Slot this task reads its text from (null = built from other slots).
   Slot? get slot => switch (this) {
-        meWater => Slot.morning,
-        meBreakfast => Slot.breakfast,
-        meLunch => Slot.lunch,
-        meSnack => Slot.snack,
-        meDinner => Slot.dinner,
-        meMilk => Slot.night,
+        memberWater => Slot.morning,
+        memberBreakfast => Slot.breakfast,
+        memberLunch => Slot.lunch,
+        memberSnack => Slot.snack,
+        memberDinner => Slot.dinner,
+        memberMilk => Slot.night,
         cookDinner => Slot.dinner,
         _ => null,
       };

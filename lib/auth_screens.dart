@@ -279,7 +279,7 @@ class FamilyStartPage extends StatefulWidget {
 
 class _FamilyStartPageState extends State<FamilyStartPage> with BusyState {
   final _familyName = TextEditingController();
-  Role _role = Role.me;
+  Role _role = Role.familyMember;
   late final Stream<List<Invite>> _invites =
       Sync.watchInvites(widget.session.inviteKeys);
 
