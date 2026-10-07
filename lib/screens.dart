@@ -367,7 +367,7 @@ Future<String?> _askText(BuildContext context, String title, String initial,
         controller: c,
         autofocus: true,
         maxLines: null,
-        decoration: InputDecoration(hintText: hint),
+        decoration: InputDecoration(hintText: hint, hintMaxLines: 3),
       ),
       actions: [
         TextButton(

@@ -236,10 +236,18 @@ void main() {
 
   test('every slot has a placeholder and the last one is Bedtime', () {
     expect(Slot.morning.hint, 'Warm water, soaked dry fruits');
-    expect(Slot.breakfast.hint, 'Healthy breakfast item');
-    expect(Slot.lunch.hint, 'Healthy lunch item');
-    expect(Slot.snack.hint, 'Healthy snack');
-    expect(Slot.dinner.hint, 'Healthy dinner item');
+    expect(Slot.breakfast.hint, startsWith('e.g. Moong dal cheela'));
+    expect(Slot.lunch.hint, startsWith('e.g. Roti, dal'));
+    expect(Slot.snack.hint, startsWith('e.g. Roasted chana'));
+    expect(Slot.dinner.hint, startsWith('e.g. Moong dal khichdi'));
+    // Suggestions respect the family's guidelines: no fried food, no raw
+    // tomato or spinach.
+    for (final s in Slot.values) {
+      final h = s.hint.toLowerCase();
+      expect(h.contains('fried') || h.contains('spinach') || h.contains('tomato'),
+          isFalse,
+          reason: '${s.name} hint');
+    }
     expect(Slot.night.hint, 'Milk');
     expect(Slot.night.label, 'Bedtime');
     for (final s in Slot.values) {
@@ -259,6 +267,6 @@ void main() {
     // The Breakfast card on Today opens the edit box with its placeholder.
     await tester.tap(find.text('Tap to add').first);
     await tester.pumpAndSettle();
-    expect(find.text('Healthy breakfast item'), findsOneWidget);
+    expect(find.textContaining('Moong dal cheela'), findsOneWidget);
   });
 }

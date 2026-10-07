@@ -30,10 +30,10 @@ extension SlotInfo on Slot {
   /// Placeholder shown in the edit box while it is empty.
   String get hint => switch (this) {
         Slot.morning => 'Warm water, soaked dry fruits',
-        Slot.breakfast => 'Healthy breakfast item',
-        Slot.lunch => 'Healthy lunch item',
-        Slot.snack => 'Healthy snack',
-        Slot.dinner => 'Healthy dinner item',
+        Slot.breakfast => 'e.g. Moong dal cheela, poha with peanuts, vegetable oats upma',
+        Slot.lunch => 'e.g. Roti, dal, seasonal sabzi, cucumber salad',
+        Slot.snack => 'e.g. Roasted chana, fruit, makhana, sprouts chaat',
+        Slot.dinner => 'e.g. Moong dal khichdi, vegetable soup, 2 roti with lauki sabzi',
         Slot.night => 'Milk',
       };
 
