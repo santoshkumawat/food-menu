@@ -234,7 +234,6 @@ String errorMessage(Object e) {
 }
 
 String _short(String? s) {
-  final t = (s ?? '').replaceAll('
-', ' ').trim();
+  final t = (s ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
   return t.length > 140 ? '${t.substring(0, 140)}...' : t;
 }
