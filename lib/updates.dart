@@ -34,17 +34,39 @@ bool isNewerVersion(String latest, String installed) {
   return false;
 }
 
+/// Turns release notes into plain text for the update banner.
+///
+/// If the notes contain a hidden line `<!-- summary: ... -->`, that sentence is
+/// shown. Otherwise HTML tags, images, links and Markdown symbols are removed,
+/// so notes can start with a logo and headings.
+String notesForBanner(String body) {
+  final summary =
+      RegExp(r'<!--\s*summary:\s*(.*?)\s*-->', dotAll: true).firstMatch(body);
+  var t = summary != null ? summary.group(1)! : body;
+  if (summary == null) {
+    t = t
+        .replaceAll(RegExp(r'<!--.*?-->', dotAll: true), '')
+        .replaceAll(RegExp(r'!\[[^\]]*\]\([^)]*\)'), '')
+        .replaceAllMapped(RegExp(r'\[([^\]]+)\]\([^)]*\)'), (m) => m[1]!)
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll(RegExp(r'^\s*[-*_]{3,}\s*$', multiLine: true), '')
+        .replaceAll(RegExp(r'^\s{0,3}#{1,6}\s*', multiLine: true), '')
+        .replaceAll(RegExp(r'[*`]{1,3}'), '');
+  }
+  t = t.replaceAll(RegExp(r'\s+'), ' ').trim();
+  return t.length > 240 ? '${t.substring(0, 240)}...' : t;
+}
+
 /// Reads GitHub's "latest release" answer. Null for drafts, pre-releases or
 /// anything without a version tag.
 UpdateInfo? parseRelease(Map<String, dynamic> json) {
   final tag = json['tag_name'];
   if (tag is! String || tag.trim().isEmpty) return null;
   if (json['draft'] == true || json['prerelease'] == true) return null;
-  final notes = ((json['body'] as String?) ?? '').trim();
   return UpdateInfo(
     tag.trim().replaceFirst(RegExp(r'^[vV]'), ''),
     (json['html_url'] as String?) ?? appDownloadUrl,
-    notes.length > 240 ? '${notes.substring(0, 240)}...' : notes,
+    notesForBanner((json['body'] as String?) ?? ''),
   );
 }
 

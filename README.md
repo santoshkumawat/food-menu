@@ -121,6 +121,10 @@ app's update notice compares the tag with the installed version number, so a
 tag that does not match the `pubspec.yaml` version would show a wrong banner.
 Mark the release as a normal one: drafts and pre-releases are ignored.
 
+The release notes can use a logo, HTML and Markdown. The update banner strips
+those. To control exactly what the banner says, put a hidden line first:
+`<!-- summary: One sentence about what changed. -->`
+
 People open the link on their phone, download the APK and allow installs from
 that source. Phones that already have the app see the update banner within a
 day, or straight away via the menu's **Check for updates**. The repository must

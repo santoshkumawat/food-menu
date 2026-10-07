@@ -313,4 +313,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Version 9.8.7 (12)'), findsOneWidget);
   });
+
+  test('release notes are cleaned for the update banner', () {
+    const withLogo = """
+<p align="center">
+  <img src="https://example.com/logo.png" alt="logo" width="120" />
+</p>
+
+<h1 align="center">Aaj Kya Banega?</h1>
+
+---
+
+## What's in v1.0.2
+
+- **Menu** shows the [version](https://example.com).
+""";
+    final cleaned = notesForBanner(withLogo);
+    expect(cleaned, isNot(contains('<')));
+    expect(cleaned, isNot(contains('http')));
+    expect(cleaned, isNot(contains('**')));
+    expect(cleaned, isNot(contains('##')));
+    expect(cleaned, contains("What's in v1.0.2"));
+    expect(cleaned, contains('Menu shows the version.'));
+
+    // A hidden summary comment wins, and is what the banner shows.
+    const withSummary = """
+<!-- summary: Shows the version in the menu and fixes the invite list. -->
+<p align="center"><img src="x.png"/></p>
+## Long notes
+""";
+    expect(notesForBanner(withSummary),
+        'Shows the version in the menu and fixes the invite list.');
+
+    // Long notes are cut.
+    expect(notesForBanner('a' * 500).length, 243);
+    expect(notesForBanner(''), isEmpty);
+  });
 }
