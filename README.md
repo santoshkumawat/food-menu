@@ -10,7 +10,7 @@ Built with Flutter.
 
 **Menu**
 - Weekly menu with morning routine, breakfast, lunch, snacks, dinner and an
-  after-dinner slot (Mon to Sun). Tap any item to edit it; each box shows a
+  bedtime slot (Mon to Sun). Tap any item to edit it; each box shows a
   placeholder (for example "Healthy breakfast item") until you type.
 - Today screen with a greeting, filter pills (icon + count) and a "NEXT" badge.
 - Week screen with the same pills and a sort menu (Monday to Sunday, or
@@ -33,7 +33,7 @@ Built with Flutter.
   **Soaked**, on the notification or in the app, cancels the follow-up and tells
   the family.
 - **Family member:** reminders for the morning routine, breakfast, lunch,
-  snacks, dinner and the after-dinner item, showing that day's dish.
+  snacks, dinner and the bedtime item, showing that day's dish.
 - Reminders for the next 7 days are scheduled as one-off notifications and
   rebuilt after every change, so "done" ticks and menu edits take effect.
 

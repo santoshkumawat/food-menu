@@ -30,7 +30,7 @@ enum Task {
   memberLunch(Role.familyMember, 'Lunch'),
   memberSnack(Role.familyMember, 'Snacks'),
   memberDinner(Role.familyMember, 'Dinner'),
-  memberMilk(Role.familyMember, 'After dinner');
+  memberMilk(Role.familyMember, 'Bedtime');
 
   const Task(this.role, this.label);
 

@@ -234,14 +234,14 @@ void main() {
     }
   });
 
-  test('every slot has a placeholder and the last one is After dinner', () {
+  test('every slot has a placeholder and the last one is Bedtime', () {
     expect(Slot.morning.hint, 'Warm water, soaked dry fruits');
     expect(Slot.breakfast.hint, 'Healthy breakfast item');
     expect(Slot.lunch.hint, 'Healthy lunch item');
     expect(Slot.snack.hint, 'Healthy snack');
     expect(Slot.dinner.hint, 'Healthy dinner item');
     expect(Slot.night.hint, 'Milk');
-    expect(Slot.night.label, 'After dinner');
+    expect(Slot.night.label, 'Bedtime');
     for (final s in Slot.values) {
       expect(s.hint, isNotEmpty);
     }

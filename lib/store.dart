@@ -15,7 +15,7 @@ extension SlotInfo on Slot {
         Slot.lunch => 'Lunch',
         Slot.snack => 'Snacks',
         Slot.dinner => 'Dinner',
-        Slot.night => 'After dinner',
+        Slot.night => 'Bedtime',
       };
 
   IconData get icon => switch (this) {
@@ -43,7 +43,7 @@ extension SlotInfo on Slot {
         Slot.lunch => 'Lunch',
         Slot.snack => 'Snacks',
         Slot.dinner => 'Dinner',
-        Slot.night => 'After dinner',
+        Slot.night => 'Bedtime',
       };
 
   /// Icon colour for this slot, from the Expensely palette
