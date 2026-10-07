@@ -2,10 +2,17 @@ import 'store.dart';
 
 /// Who is using this phone.
 enum Role {
-  cook('Cook (makes the food)'),
-  me('Me (eats and plans the menu)');
+  // The enum names are stored in saved data and on the server, so they stay
+  // `cook` and `me`; only the display names below are user-facing.
+  cook('Cook', 'Cook (makes the food)'),
+  me('Family member', 'Family member (eats and plans the menu)');
 
-  const Role(this.label);
+  const Role(this.shortName, this.label);
+
+  /// Compact name for lists and subtitles.
+  final String shortName;
+
+  /// Full description for choosing a role.
   final String label;
 }
 

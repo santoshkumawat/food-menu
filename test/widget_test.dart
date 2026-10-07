@@ -36,7 +36,7 @@ void main() {
     store.setProfile(Role.me, 'Test', null);
     await tester.pumpWidget(App(store: store, session: Session(store)));
 
-    // Today: the cook's checklist is not shown for the "Me" role.
+    // Today: the cook's checklist is not shown for the Family member role.
     expect(find.text('Your checklist'), findsNothing);
     expect(find.text('Kitchen status'), findsNothing);
     await tester.tap(find.text('Morning'));
@@ -127,5 +127,14 @@ void main() {
     // The family's guidelines arrive, but medicines stay personal.
     expect(reopened.medicines, ['9 PM - my own']);
     expect(reopened.lastSeenRev, 4);
+  });
+
+  test('roles are called Cook and Family member', () {
+    expect(Role.cook.shortName, 'Cook');
+    expect(Role.me.shortName, 'Family member');
+    expect(Role.me.label, startsWith('Family member'));
+    // Saved data and Firestore keep using the stable internal names.
+    expect(Role.me.name, 'me');
+    expect(Role.cook.name, 'cook');
   });
 }

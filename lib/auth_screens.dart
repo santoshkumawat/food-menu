@@ -320,7 +320,7 @@ class _FamilyStartPageState extends State<FamilyStartPage> with BusyState {
                       leading: const Icon(Icons.group_add_outlined),
                       title: Text(inv.familyName),
                       subtitle: Text(
-                          'Invited by ${inv.invitedBy.isEmpty ? 'the admin' : inv.invitedBy} as ${inv.role.label}'),
+                          'Invited by ${inv.invitedBy.isEmpty ? 'the admin' : inv.invitedBy} as ${inv.role.shortName}'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [

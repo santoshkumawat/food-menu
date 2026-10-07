@@ -346,7 +346,7 @@ class _SetupPageState extends State<SetupPage> {
             onPressed: _role == null
                 ? null
                 : () => widget.store.setProfile(
-                    _role!, _name.text.trim().isEmpty ? 'Me' : _name.text, null),
+                    _role!, _name.text.trim().isEmpty ? _role!.shortName : _name.text, null),
             child: const Text('Continue on this phone'),
           ),
         ],
@@ -990,7 +990,7 @@ class SettingsPage extends StatelessWidget {
           leading: const Icon(Icons.group_outlined),
           title: Text(store.familyName.isEmpty ? 'Family' : store.familyName),
           subtitle: Text(
-              'Your role: ${store.role!.label}${admin ? ' (Admin)' : ''}'),
+              'Your role: ${store.role!.shortName}${admin ? ' (Admin)' : ''}'),
         ),
         if (admin) ...[
           ListTile(
@@ -1007,7 +1007,7 @@ class SettingsPage extends StatelessWidget {
                   ListTile(
                     leading: const Icon(Icons.mail_outline),
                     title: Text(p.key),
-                    subtitle: Text('Invited as ${p.role.label} - waiting'),
+                    subtitle: Text('Invited as ${p.role.shortName} - waiting'),
                     trailing: IconButton(
                       tooltip: 'Cancel invite',
                       icon: const Icon(Icons.close),
@@ -1059,7 +1059,7 @@ class SettingsPage extends StatelessWidget {
           : Icons.person_outline),
       title: Text('${m.name.isEmpty ? m.username : m.name}${isMe ? ' (you)' : ''}'),
       subtitle: Text(
-          '@${m.username} - ${m.role.label}${m.admin ? ' - Admin' : ''}'),
+          '@${m.username} - ${m.role.shortName}${m.admin ? ' - Admin' : ''}'),
       trailing: admin
           ? PopupMenuButton<String>(
               onSelected: (v) async {
@@ -1078,7 +1078,7 @@ class SettingsPage extends StatelessWidget {
               itemBuilder: (_) => [
                 for (final r in Role.values)
                   if (r != m.role)
-                    PopupMenuItem(value: r.name, child: Text('Make ${r.label}')),
+                    PopupMenuItem(value: r.name, child: Text('Make ${r.shortName}')),
                 if (!m.admin)
                   const PopupMenuItem(value: 'remove', child: Text('Remove from family')),
               ],
@@ -1248,7 +1248,7 @@ class SettingsPage extends StatelessWidget {
         SwitchListTile(
           secondary: const Icon(Icons.notifications_outlined),
           title: const Text('Notifications'),
-          subtitle: Text('Reminders for: ${role.label}'),
+          subtitle: Text('Reminders for: ${role.shortName}'),
           value: store.notificationsOn,
           onChanged: store.setNotificationsOn,
         ),
