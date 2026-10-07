@@ -28,7 +28,7 @@ enum Task {
   memberWater(Role.familyMember, 'Morning routine'),
   memberBreakfast(Role.familyMember, 'Breakfast'),
   memberLunch(Role.familyMember, 'Lunch'),
-  memberSnack(Role.familyMember, 'Snacks'),
+  memberSnack(Role.familyMember, 'Evening Snacks'),
   memberDinner(Role.familyMember, 'Dinner'),
   memberMilk(Role.familyMember, 'Bedtime');
 

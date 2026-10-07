@@ -235,7 +235,7 @@ void main() {
   });
 
   test('every slot has a placeholder and the last one is Bedtime', () {
-    expect(Slot.morning.hint, 'Warm water, soaked dry fruits');
+    expect(Slot.morning.hint, 'e.g. Warm water, soaked dry fruits');
     expect(Slot.breakfast.hint, startsWith('e.g. Moong dal cheela'));
     expect(Slot.lunch.hint, startsWith('e.g. Roti, dal'));
     expect(Slot.snack.hint, startsWith('e.g. Roasted chana'));
@@ -248,7 +248,7 @@ void main() {
           isFalse,
           reason: '${s.name} hint');
     }
-    expect(Slot.night.hint, 'Milk');
+    expect(Slot.night.hint, 'e.g. Milk');
     expect(Slot.night.label, 'Bedtime');
     for (final s in Slot.values) {
       expect(s.hint, isNotEmpty);
