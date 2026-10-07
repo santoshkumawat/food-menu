@@ -74,7 +74,7 @@ void _full(Canvas c, double s, {bool round = true}) {
     ).createShader(rect);
   c.drawRRect(
       RRect.fromRectAndRadius(rect, Radius.circular(round ? s * 0.22 : 0)), paint);
-  _glyph(c, s, scale: 1.45);
+  _glyph(c, s, scale: 1.15);
 }
 
 void main() {
@@ -91,7 +91,7 @@ void main() {
     for (final e in adaptive.entries) {
       // Transparent foreground; the colour behind it comes from colors.xml.
       await _write('$res/mipmap-${e.key}/ic_launcher_foreground.png', e.value,
-          (c, s) => _glyph(c, s));
+          (c, s) => _glyph(c, s, scale: 0.78));
     }
     await _write('web/favicon.png', 32, _full);
     await _write('web/icons/Icon-192.png', 192, _full);
