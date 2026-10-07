@@ -8,6 +8,7 @@ import 'notifications.dart';
 import 'store.dart';
 import 'sync.dart';
 import 'tasks.dart';
+import 'links.dart';
 import 'widgets.dart';
 
 class HomeShell extends StatefulWidget {
@@ -999,6 +1000,13 @@ class SettingsPage extends StatelessWidget {
             subtitle: const Text('By email or username'),
             onTap: () => _inviteDialog(context, code),
           ),
+          ListTile(
+            leading: const Icon(Icons.share_outlined),
+            title: const Text('Share the app download link'),
+            subtitle: const Text('Latest release on GitHub'),
+            onTap: () => SharePlus.instance.share(ShareParams(
+                text: 'Download Aaj Kya Banega? $appDownloadUrl')),
+          ),
           ValueListenableBuilder<List<PendingInvite>>(
             valueListenable: Sync.pendingInvites,
             builder: (context, list, _) => Column(
@@ -1188,11 +1196,8 @@ class SettingsPage extends StatelessWidget {
       content: Text('Invited $key. They will see it after signing in.'),
       action: SnackBarAction(
         label: 'Tell them',
-        onPressed: () => SharePlus.instance.share(ShareParams(
-          text: 'I invited you to "${store.familyName}" on Aaj Kya Banega. '
-              'Install the app, sign up or log in with ${isEmail(key) ? 'this email: $key' : 'the username: $key'}, '
-              'and accept the invitation.',
-        )),
+        onPressed: () => SharePlus.instance.share(
+            ShareParams(text: inviteMessage(store.familyName, key))),
       ),
     ));
   }

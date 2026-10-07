@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:aaj_kya_banega/account.dart';
+import 'package:aaj_kya_banega/links.dart';
 import 'package:aaj_kya_banega/main.dart';
 import 'package:aaj_kya_banega/store.dart';
 import 'package:aaj_kya_banega/tasks.dart';
@@ -151,5 +152,16 @@ void main() {
     final store = AppStore(await SharedPreferences.getInstance());
     expect(store.role, Role.familyMember);
     expect(store.taskTime(Task.memberBreakfast, DateTime.monday), 600);
+  });
+
+  test('the invite message carries the release link and how to sign in', () {
+    final byEmail = inviteMessage('Kumawat family', 'anjali@example.com');
+    expect(byEmail, contains(appDownloadUrl));
+    expect(byEmail, contains('this email: anjali@example.com'));
+    expect(byEmail, contains('Kumawat family'));
+
+    final byName = inviteMessage('Kumawat family', 'anjali_k');
+    expect(byName, contains('the username: anjali_k'));
+    expect(appDownloadUrl, endsWith('/releases/latest'));
   });
 }

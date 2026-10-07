@@ -105,6 +105,21 @@ flutter run
 Keep a backup of the keystore. Without it you cannot publish updates that
 install over the existing app.
 
+### 5. Publish a release (the invite link points here)
+The invite message the admin shares links to
+`https://github.com/santoshkumawat/food-menu/releases/latest`, which always
+opens the newest release.
+1. Raise `version` in `pubspec.yaml`, for example `1.0.1+2`. The number after
+   `+` must go up each time, or Android will not install it over the old app.
+2. Build the signed APK (step 4) and commit.
+3. On GitHub: **Releases -> Draft a new release**, create a tag such as
+   `v1.0.1`, attach `build/app/outputs/flutter-apk/app-release.apk`, write a
+   short note and **Publish release**.
+
+People open the link on their phone, download the APK and allow installs from
+that source. The repository must stay public for the link to work without a
+GitHub login.
+
 ### Tests
 ```bash
 flutter analyze
@@ -143,7 +158,8 @@ inboxes/{key}/invites/{code}     an invitation as the invited person sees it
 
 ## Good to know
 - Firebase's free plan cannot send the invitation email itself. After
-  inviting, use **Tell them** to share a message, for example on WhatsApp.
+  inviting, use **Tell them** to share a message, for example on WhatsApp. The
+  message includes the download link for the latest release.
 - Background checks and reminders depend on Android. On Samsung, Xiaomi, Oppo
   and Vivo phones set the app's battery use to **Unrestricted**.
 - Reminder times use the phone's time zone.
