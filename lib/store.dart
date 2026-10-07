@@ -142,6 +142,7 @@ class AppStore extends ChangeNotifier {
   Role? role;
   String myName = '';
   String? familyCode;
+  bool isAdmin = false;
   int lastSeenRev = 0;
   Set<String> done = {};
 
@@ -184,10 +185,11 @@ class AppStore extends ChangeNotifier {
     _save();
   }
 
-  void setProfile(Role r, String name, String? code) {
+  void setProfile(Role r, String name, String? code, {bool admin = false}) {
     role = r;
     myName = name.trim();
     familyCode = code;
+    isAdmin = admin;
     _save();
   }
 
@@ -195,12 +197,7 @@ class AppStore extends ChangeNotifier {
     role = null;
     myName = '';
     familyCode = null;
-    lastSeenRev = 0;
-    _save();
-  }
-
-  void leaveFamily() {
-    familyCode = null;
+    isAdmin = false;
     lastSeenRev = 0;
     _save();
   }
@@ -271,6 +268,7 @@ class AppStore extends ChangeNotifier {
       role = r == null ? null : Role.values.asNameMap()[r];
       myName = j['name'] as String? ?? '';
       familyCode = j['family'] as String?;
+      isAdmin = j['admin'] as bool? ?? false;
       lastSeenRev = j['rev'] as int? ?? 0;
     } catch (_) {
       // Corrupt data: keep defaults.
@@ -289,6 +287,7 @@ class AppStore extends ChangeNotifier {
         'role': role?.name,
         'name': myName,
         'family': familyCode,
+        'admin': isAdmin,
         'rev': lastSeenRev,
       }),
     );
