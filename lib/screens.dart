@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'account.dart';
@@ -30,6 +31,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   SyncSession? _session;
   String? _subscribedCode;
 
+  /// Installed version, e.g. "1.0.2 (3)". Null until it has been read.
+  String? _version;
+
   AppStore get _store => widget.store;
 
   @override
@@ -39,6 +43,18 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _store.addListener(_syncSubscription);
     _syncSubscription();
     widget.updates?.check();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() => _version = '${info.version} (${info.buildNumber})');
+      }
+    } catch (_) {
+      // Not available (for example in tests): the menu just omits it.
+    }
   }
 
   @override
@@ -180,6 +196,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   if (Sync.available)
                     const MenuOption('signout', 'Sign out', Icons.logout,
                         dividerBefore: true),
+                  if (_version != null)
+                    MenuOption('version', 'Version $_version',
+                        Icons.info_outline,
+                        dividerBefore: !Sync.available),
                 ],
               ),
               const SizedBox(width: 4),
@@ -226,6 +246,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   Future<void> _onMenu(String value) async {
     switch (value) {
+      case 'version':
+        break; // just shows the installed version
       case 'theme':
         _store.setThemeMode(
             Theme.of(context).brightness == Brightness.dark

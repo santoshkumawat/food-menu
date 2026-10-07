@@ -8,6 +8,7 @@ import 'package:aaj_kya_banega/updates.dart';
 import 'package:aaj_kya_banega/store.dart';
 import 'package:aaj_kya_banega/tasks.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -289,5 +290,27 @@ void main() {
     expect(Task.memberSnack.label, Slot.snack.label);
     expect(Task.memberDinner.label, Slot.dinner.label);
     expect(Task.memberMilk.label, Slot.night.label);
+  });
+
+  testWidgets('the menu shows the installed version', (tester) async {
+    PackageInfo.setMockInitialValues(
+      appName: 'Aaj Kya Banega?',
+      packageName: 'com.santosh.aaj_kya_banega',
+      version: '9.8.7',
+      buildNumber: '12',
+      buildSignature: '',
+    );
+    tester.view.physicalSize = const Size(360 * 3, 800 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    final store = await newStore();
+    store.setProfile(Role.familyMember, 'Test', null);
+    await tester.pumpWidget(App(store: store, session: Session(store)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pumpAndSettle();
+    expect(find.text('Version 9.8.7 (12)'), findsOneWidget);
   });
 }
