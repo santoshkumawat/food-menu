@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Release builds shrink unused resources. The notification plugin looks the
+  status-bar icon up by name at runtime, so the shrinker cannot see that it is
+  used and would delete it, which stops the app from starting.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_menu,@mipmap/ic_launcher,@mipmap/ic_launcher_foreground,@color/ic_launcher_background" />

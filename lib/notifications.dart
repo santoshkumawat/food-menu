@@ -32,28 +32,38 @@ class Notifier {
   bool get supported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
+  /// Sets up notifications. A failure here must never stop the app from
+  /// opening, so errors are caught and reminders simply stay off.
   Future<void> init() async {
     if (!supported || _ready) return;
-    tzdata.initializeTimeZones();
-    final zone = await FlutterTimezone.getLocalTimezone();
-    tz.setLocalLocation(tz.getLocation(zone.identifier));
-    await _plugin.initialize(
-      settings: const InitializationSettings(
-        android: AndroidInitializationSettings('ic_stat_menu'),
-      ),
-      onDidReceiveNotificationResponse: handleResponse,
-      onDidReceiveBackgroundNotificationResponse: onNotificationBackground,
-    );
-    _ready = true;
+    try {
+      tzdata.initializeTimeZones();
+      final zone = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(zone.identifier));
+      await _plugin.initialize(
+        settings: const InitializationSettings(
+          android: AndroidInitializationSettings('ic_stat_menu'),
+        ),
+        onDidReceiveNotificationResponse: handleResponse,
+        onDidReceiveBackgroundNotificationResponse: onNotificationBackground,
+      );
+      _ready = true;
+    } catch (e) {
+      debugPrint('Notifications could not start: $e');
+    }
   }
 
   Future<void> requestPermissions() async {
     if (!_ready) return;
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    await android?.requestNotificationsPermission();
-    if (!(await android?.canScheduleExactNotifications() ?? true)) {
-      await android?.requestExactAlarmsPermission();
+    try {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      await android?.requestNotificationsPermission();
+      if (!(await android?.canScheduleExactNotifications() ?? true)) {
+        await android?.requestExactAlarmsPermission();
+      }
+    } catch (e) {
+      debugPrint('Notification permission request failed: $e');
     }
   }
 

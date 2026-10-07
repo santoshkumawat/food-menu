@@ -12,12 +12,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final store = AppStore(await SharedPreferences.getInstance());
 
-  await Sync.init();
-  await Sync.setupBackground();
+  await _safely(Sync.init);
+  await _safely(Sync.setupBackground);
 
   final notifier = Notifier.instance;
-  await notifier.init();
-  await notifier.requestPermissions();
+  await _safely(notifier.init);
+  await _safely(notifier.requestPermissions);
 
   // Reminders follow every change: menu edits, times, role, done ticks.
   store.addListener(() => notifier.reschedule(store));
@@ -26,8 +26,8 @@ Future<void> main() async {
   notifier.onDoneChanged = store.reloadDone;
 
   if (store.isSetUp) {
-    await notifier.reschedule(store);
-    if (store.familyCode != null) await Sync.startBackground();
+    await _safely(() => notifier.reschedule(store));
+    if (store.familyCode != null) await _safely(Sync.startBackground);
   }
   final session = Session(store)..start();
   runApp(App(
@@ -35,6 +35,16 @@ Future<void> main() async {
     session: session,
     updates: UpdateChecker(store.prefs),
   ));
+}
+
+/// Start-up steps (notifications, sync, background work) must never stop the
+/// screen from appearing, so a failure is logged and skipped.
+Future<void> _safely(Future<void> Function() step) async {
+  try {
+    await step();
+  } catch (e) {
+    debugPrint('Start-up step failed: $e');
+  }
 }
 
 class App extends StatelessWidget {
