@@ -216,8 +216,8 @@ class Notifier {
         );
       case Task.memberMilk:
         return (
-          title: 'Turmeric milk',
-          body: _or(d(Slot.night), 'Time for your bedtime milk'),
+          title: 'After dinner',
+          body: _or(d(Slot.night), 'Time for your after-dinner item'),
           doneLabel: '',
         );
     }

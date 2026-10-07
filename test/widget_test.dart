@@ -233,4 +233,32 @@ void main() {
       expect(greetingFor(h), 'Good evening', reason: 'hour $h');
     }
   });
+
+  test('every slot has a placeholder and the last one is After dinner', () {
+    expect(Slot.morning.hint, 'Warm water, soaked dry fruits');
+    expect(Slot.breakfast.hint, 'Healthy breakfast item');
+    expect(Slot.lunch.hint, 'Healthy lunch item');
+    expect(Slot.snack.hint, 'Healthy snack');
+    expect(Slot.dinner.hint, 'Healthy dinner item');
+    expect(Slot.night.hint, 'Milk');
+    expect(Slot.night.label, 'After dinner');
+    for (final s in Slot.values) {
+      expect(s.hint, isNotEmpty);
+    }
+  });
+
+  testWidgets('the edit box shows the placeholder for the slot', (tester) async {
+    tester.view.physicalSize = const Size(360 * 3, 800 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    final store = await newStore();
+    store.setProfile(Role.familyMember, 'Test', null);
+    await tester.pumpWidget(App(store: store, session: Session(store)));
+
+    // The Breakfast card on Today opens the edit box with its placeholder.
+    await tester.tap(find.text('Tap to add').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Healthy breakfast item'), findsOneWidget);
+  });
 }

@@ -15,7 +15,7 @@ extension SlotInfo on Slot {
         Slot.lunch => 'Lunch',
         Slot.snack => 'Snacks',
         Slot.dinner => 'Dinner',
-        Slot.night => 'Turmeric milk',
+        Slot.night => 'After dinner',
       };
 
   IconData get icon => switch (this) {
@@ -27,13 +27,23 @@ extension SlotInfo on Slot {
         Slot.night => Icons.nightlight_outlined,
       };
 
+  /// Placeholder shown in the edit box while it is empty.
+  String get hint => switch (this) {
+        Slot.morning => 'Warm water, soaked dry fruits',
+        Slot.breakfast => 'Healthy breakfast item',
+        Slot.lunch => 'Healthy lunch item',
+        Slot.snack => 'Healthy snack',
+        Slot.dinner => 'Healthy dinner item',
+        Slot.night => 'Milk',
+      };
+
   String get shortLabel => switch (this) {
         Slot.morning => 'Morning',
         Slot.breakfast => 'Breakfast',
         Slot.lunch => 'Lunch',
         Slot.snack => 'Snacks',
         Slot.dinner => 'Dinner',
-        Slot.night => 'Milk',
+        Slot.night => 'After dinner',
       };
 
   /// Icon colour for this slot, from the Expensely palette

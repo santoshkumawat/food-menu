@@ -499,7 +499,8 @@ class SlotCard extends StatelessWidget {
       child: InkWell(
         onTap: () async {
           final v = await _askText(
-              context, '${dayNames[weekday - 1]} - ${slot.label}', dish);
+              context, '${dayNames[weekday - 1]} - ${slot.label}', dish,
+              hint: slot.hint);
           if (v != null) store.setDish(weekday, slot, v);
         },
         child: Padding(
