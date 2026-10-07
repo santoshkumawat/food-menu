@@ -35,14 +35,19 @@ extension SlotInfo on Slot {
         Slot.night => 'Milk',
       };
 
-  Color get color => switch (this) {
-        Slot.morning => const Color(0xFFF9A825),
-        Slot.breakfast => const Color(0xFFF4511E),
-        Slot.lunch => const Color(0xFF43A047),
-        Slot.snack => const Color(0xFF8E24AA),
-        Slot.dinner => const Color(0xFF3949AB),
-        Slot.night => const Color(0xFF6D4C41),
-      };
+  /// Icon colour for this slot, from the Expensely palette
+  /// (warm, expense, good, cool, income, accent) for each theme.
+  Color tone(Brightness b) {
+    final dark = b == Brightness.dark;
+    return switch (this) {
+      Slot.morning => const Color(0xFFE58B3A),
+      Slot.breakfast => dark ? const Color(0xFFD19B6B) : const Color(0xFF7F5229),
+      Slot.lunch => const Color(0xFF4FA58A),
+      Slot.snack => dark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB),
+      Slot.dinner => dark ? const Color(0xFF68A19D) : const Color(0xFF3A6F61),
+      Slot.night => dark ? const Color(0xFFD1D5DB) : const Color(0xFF1F2937),
+    };
+  }
 
   /// Meals that are always shown on the Today page, even when empty.
   bool get isMeal =>
@@ -149,6 +154,7 @@ class AppStore extends ChangeNotifier {
   }
 
   static const _key = 'store_v1';
+  static const _themeKey = 'theme_mode';
   final SharedPreferences prefs;
 
   Map<int, Map<Slot, String>> menu = defaultMenu();
@@ -156,6 +162,8 @@ class AppStore extends ChangeNotifier {
   bool notificationsOn = true;
   List<String> medicines = [];
   List<String> guidelines = [...defaultGuidelines];
+
+  ThemeMode themeMode = ThemeMode.system;
 
   Role? role;
   String myName = '';
@@ -187,6 +195,12 @@ class AppStore extends ChangeNotifier {
   void setTaskTime(bool weekend, Task t, int minutes) {
     _taskTimes['${weekend ? 1 : 0}_${t.name}'] = minutes;
     _save();
+  }
+
+  void setThemeMode(ThemeMode mode) {
+    themeMode = mode;
+    prefs.setString(_themeKey, mode.name);
+    notifyListeners();
   }
 
   void setNotificationsOn(bool v) {
@@ -287,6 +301,11 @@ class AppStore extends ChangeNotifier {
   }
 
   void _load() {
+    themeMode = switch (prefs.getString(_themeKey)) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
     final raw = prefs.getString(_key);
     final doneRaw = prefs.getStringList(DoneLog._key);
     done = (doneRaw ?? []).toSet();

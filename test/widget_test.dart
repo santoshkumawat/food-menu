@@ -68,4 +68,11 @@ void main() {
     final again = AppStore(store.prefs);
     expect(again.dish(1, Slot.snack), 'Fruit chaat');
   });
+
+  test('theme choice is remembered', () async {
+    final store = await newStore();
+    expect(store.themeMode, ThemeMode.system);
+    store.setThemeMode(ThemeMode.dark);
+    expect(AppStore(store.prefs).themeMode, ThemeMode.dark);
+  });
 }

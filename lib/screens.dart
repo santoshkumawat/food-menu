@@ -106,6 +106,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           HealthPage(store: _store),
         ];
         final cs = Theme.of(context).colorScheme;
+        final dark = Theme.of(context).brightness == Brightness.dark;
         final family = _store.familyName.trim();
         return Scaffold(
           appBar: AppBar(
@@ -153,6 +154,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                 tooltip: 'Menu',
                 onSelected: _onMenu,
                 options: [
+                  MenuOption(
+                      'theme',
+                      dark ? 'Light theme' : 'Dark theme',
+                      dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
                   const MenuOption('reminders', 'Reminders & times', Icons.alarm),
                   const MenuOption('test', 'Send test notification',
                       Icons.notifications_active_outlined),
@@ -197,6 +202,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   Future<void> _onMenu(String value) async {
     switch (value) {
+      case 'theme':
+        _store.setThemeMode(
+            Theme.of(context).brightness == Brightness.dark
+                ? ThemeMode.light
+                : ThemeMode.dark);
       case 'reminders':
         await Navigator.push(
           context,
@@ -379,6 +389,7 @@ class SlotCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final dish = store.dish(weekday, slot);
+    final tone = slot.tone(Theme.of(context).brightness);
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 5),
       clipBehavior: Clip.antiAlias,
@@ -405,10 +416,10 @@ class SlotCard extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: slot.color.withValues(alpha: 0.16),
+                  color: tone.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(slot.icon, color: slot.color),
+                child: Icon(slot.icon, color: tone),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -634,7 +645,7 @@ class _WeekPageState extends State<WeekPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(s.icon, size: 16, color: s.color),
+          Icon(s.icon, size: 16, color: s.tone(Theme.of(context).brightness)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
