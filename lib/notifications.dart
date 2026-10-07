@@ -39,7 +39,7 @@ class Notifier {
     tz.setLocalLocation(tz.getLocation(zone.identifier));
     await _plugin.initialize(
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('ic_stat_menu'),
       ),
       onDidReceiveNotificationResponse: handleResponse,
       onDidReceiveBackgroundNotificationResponse: onNotificationBackground,

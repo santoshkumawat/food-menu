@@ -26,6 +26,24 @@ extension SlotInfo on Slot {
         Slot.night => Icons.nightlight_outlined,
       };
 
+  String get shortLabel => switch (this) {
+        Slot.morning => 'Morning',
+        Slot.breakfast => 'Breakfast',
+        Slot.lunch => 'Lunch',
+        Slot.snack => 'Snacks',
+        Slot.dinner => 'Dinner',
+        Slot.night => 'Milk',
+      };
+
+  Color get color => switch (this) {
+        Slot.morning => const Color(0xFFF9A825),
+        Slot.breakfast => const Color(0xFFF4511E),
+        Slot.lunch => const Color(0xFF43A047),
+        Slot.snack => const Color(0xFF8E24AA),
+        Slot.dinner => const Color(0xFF3949AB),
+        Slot.night => const Color(0xFF6D4C41),
+      };
+
   /// Meals that are always shown on the Today page, even when empty.
   bool get isMeal =>
       this == Slot.breakfast || this == Slot.lunch || this == Slot.dinner;

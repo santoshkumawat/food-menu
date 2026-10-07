@@ -8,6 +8,7 @@ import 'notifications.dart';
 import 'store.dart';
 import 'sync.dart';
 import 'tasks.dart';
+import 'widgets.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, required this.store, required this.session});
@@ -101,27 +102,153 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         final pages = [
           TodayPage(store: _store),
           WeekPage(store: _store),
-          HealthPage(store: _store),
           SettingsPage(store: _store, session: widget.session),
+          HealthPage(store: _store),
         ];
+        final cs = Theme.of(context).colorScheme;
+        final family = _store.familyName.trim();
         return Scaffold(
-          appBar: AppBar(title: const Text('Aaj Kya Banega?')),
+          appBar: AppBar(
+            toolbarHeight: 64,
+            titleSpacing: 16,
+            title: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFFFF7043), Color(0xFFD84315)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.soup_kitchen, color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Aaj Kya Banega?',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.w800)),
+                      if (family.isNotEmpty)
+                        Text(family,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12, color: cs.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              AppMenuButton<String>(
+                tooltip: 'Menu',
+                onSelected: _onMenu,
+                options: [
+                  const MenuOption('reminders', 'Reminders & times', Icons.alarm),
+                  const MenuOption('test', 'Send test notification',
+                      Icons.notifications_active_outlined),
+                  if (_store.familyCode != null)
+                    const MenuOption(
+                        'sync', 'Check for menu changes', Icons.sync),
+                  if (Sync.available)
+                    const MenuOption('signout', 'Sign out', Icons.logout,
+                        dividerBefore: true),
+                ],
+              ),
+              const SizedBox(width: 4),
+            ],
+          ),
           body: pages[_tab],
           bottomNavigationBar: NavigationBar(
             selectedIndex: _tab,
             onDestinationSelected: (i) => setState(() => _tab = i),
             destinations: const [
-              NavigationDestination(icon: Icon(Icons.today), label: 'Today'),
               NavigationDestination(
-                  icon: Icon(Icons.calendar_view_week), label: 'Week'),
+                  icon: Icon(Icons.today_outlined),
+                  selectedIcon: Icon(Icons.today),
+                  label: 'Today'),
               NavigationDestination(
-                  icon: Icon(Icons.favorite_border), label: 'Health'),
+                  icon: Icon(Icons.calendar_view_week_outlined),
+                  selectedIcon: Icon(Icons.calendar_view_week),
+                  label: 'Week'),
               NavigationDestination(
-                  icon: Icon(Icons.settings_outlined), label: 'Settings'),
+                  icon: Icon(Icons.group_outlined),
+                  selectedIcon: Icon(Icons.group),
+                  label: 'Family'),
+              NavigationDestination(
+                  icon: Icon(Icons.favorite_border),
+                  selectedIcon: Icon(Icons.favorite),
+                  label: 'Health'),
             ],
           ),
         );
       },
+    );
+  }
+
+  Future<void> _onMenu(String value) async {
+    switch (value) {
+      case 'reminders':
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => ReminderSettingsPage(store: _store)),
+        );
+      case 'test':
+        await Notifier.instance
+            .showNow('Aaj Kya Banega?', 'Notifications are working.');
+      case 'sync':
+        try {
+          await Sync.backgroundCheck();
+          await _store.reload();
+          _snack('Checked for changes');
+        } catch (_) {
+          _snack('Could not check. Are you online?');
+        }
+      case 'signout':
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Sign out?'),
+            content: const Text('You will need to sign in again to use the app.'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel')),
+              FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Sign out')),
+            ],
+          ),
+        );
+        if (ok == true) await widget.session.signOut();
+    }
+  }
+}
+
+/// Notification switch and reminder times for this phone's role.
+class ReminderSettingsPage extends StatelessWidget {
+  const ReminderSettingsPage({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Reminders & times')),
+      body: ListenableBuilder(
+        listenable: store,
+        builder: (context, _) =>
+            SettingsPage(store: store, remindersOnly: true),
+      ),
     );
   }
 }
@@ -220,6 +347,20 @@ class _SetupPageState extends State<SetupPage> {
 
 // --- menu cards -----------------------------------------------------------
 
+const _monthNames = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+String _greeting(DateTime now) {
+  final h = now.hour;
+  return h < 12
+      ? 'Good morning'
+      : h < 17
+          ? 'Good afternoon'
+          : 'Good evening';
+}
+
 class SlotCard extends StatelessWidget {
   const SlotCard({
     super.key,
@@ -236,30 +377,116 @@ class SlotCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
     final dish = store.dish(weekday, slot);
     return Card(
-      color: highlight ? cs.primaryContainer : null,
-      child: ListTile(
-        leading: Icon(slot.icon),
-        title: Text('${slot.label} · ${formatMinutes(eatTime(weekday, slot))}'),
-        subtitle: Text(
-          dish.isEmpty ? 'Tap to add' : dish,
-          style: Theme.of(context).textTheme.bodyLarge,
+      margin: const EdgeInsets.symmetric(vertical: 5),
+      clipBehavior: Clip.antiAlias,
+      color: highlight ? cs.primaryContainer.withValues(alpha: 0.55) : null,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: highlight ? cs.primary : cs.outlineVariant,
+          width: highlight ? 1.6 : 1,
         ),
-        trailing: const Icon(Icons.edit_outlined, size: 18),
+      ),
+      child: InkWell(
         onTap: () async {
           final v = await _askText(
-              context, '${dayNames[weekday - 1]} ${slot.label}', dish);
+              context, '${dayNames[weekday - 1]} - ${slot.label}', dish);
           if (v != null) store.setDish(weekday, slot, v);
         },
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: slot.color.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(slot.icon, color: slot.color),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(slot.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: text.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w700)),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(formatMinutes(eatTime(weekday, slot)),
+                            style: text.labelMedium
+                                ?.copyWith(color: cs.onSurfaceVariant)),
+                        const Spacer(),
+                        if (highlight)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: cs.primary,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text('NEXT',
+                                style: TextStyle(
+                                    color: cs.onPrimary,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5)),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      dish.isEmpty ? 'Tap to add' : dish,
+                      style: text.bodyLarge?.copyWith(
+                        color: dish.isEmpty ? cs.onSurfaceVariant : null,
+                        fontStyle:
+                            dish.isEmpty ? FontStyle.italic : FontStyle.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-class TodayPage extends StatelessWidget {
+/// Pills for All + each meal slot, with counts.
+List<List<PillItem<Slot?>>> _slotPills(int Function(Slot) count, int total) => [
+      [
+        PillItem<Slot?>(null, 'All', count: total),
+        for (final s in Slot.values)
+          PillItem<Slot?>(s, s.shortLabel, icon: s.icon, count: count(s)),
+      ],
+    ];
+
+class TodayPage extends StatefulWidget {
   const TodayPage({super.key, required this.store});
   final AppStore store;
+
+  @override
+  State<TodayPage> createState() => _TodayPageState();
+}
+
+class _TodayPageState extends State<TodayPage> {
+  Slot? _filter;
+
+  AppStore get store => widget.store;
 
   bool _needsSoaking(DateTime now) => store
       .dish(now.add(const Duration(days: 1)).weekday, Slot.morning)
@@ -271,6 +498,8 @@ class TodayPage extends StatelessWidget {
     final cookDone = store.isDone(now, 'cook');
     final soakNeeded = _needsSoaking(now);
     final soakDone = store.isDone(now, 'soak');
+    final total = soakNeeded ? 2 : 1;
+    final doneCount = (cookDone ? 1 : 0) + (soakNeeded && soakDone ? 1 : 0);
 
     Widget row(String label, bool done, VoidCallback? onMark) => ListTile(
           dense: true,
@@ -283,13 +512,22 @@ class TodayPage extends StatelessWidget {
         );
 
     return Card(
+      margin: const EdgeInsets.symmetric(vertical: 5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Text(isCook ? 'Your checklist' : 'Kitchen status',
-                style: Theme.of(context).textTheme.titleMedium),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(isCook ? 'Your checklist' : 'Kitchen status',
+                      style: Theme.of(context).textTheme.titleMedium),
+                ),
+                Text('$doneCount/$total done',
+                    style: Theme.of(context).textTheme.labelLarge),
+              ],
+            ),
           ),
           row('Breakfast & lunch prepared', cookDone,
               () => Notifier.instance.markDone(now, 'cook')),
@@ -305,6 +543,9 @@ class TodayPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final nowMin = now.hour * 60 + now.minute;
+    final text = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+
     // Next upcoming meal (breakfast/lunch/dinner) is highlighted.
     Slot? next;
     for (final s in Slot.values.where((s) => s.isMeal)) {
@@ -313,64 +554,205 @@ class TodayPage extends StatelessWidget {
         break;
       }
     }
-    return ListView(
-      padding: const EdgeInsets.all(12),
+
+    int count(Slot s) => store.dish(now.weekday, s).isEmpty ? 0 : 1;
+    final total = Slot.values.where((s) => count(s) > 0).length;
+    final shown = _filter == null
+        ? [
+            for (final s in Slot.values)
+              if (count(s) > 0 || s.isMeal) s
+          ]
+        : [_filter!];
+    final name = store.myName.trim();
+
+    return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
-          child: Text(dayNames[now.weekday - 1],
-              style: Theme.of(context).textTheme.headlineMedium),
-        ),
-        _statusCard(context, now),
-        for (final s in Slot.values)
-          if (store.dish(now.weekday, s).isNotEmpty || s.isMeal)
-            SlotCard(
-              weekday: now.weekday,
-              slot: s,
-              store: store,
-              highlight: s == next,
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name.isEmpty ? _greeting(now) : '${_greeting(now)}, $name',
+                    style: text.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.w800)),
+                Text(
+                  '${dayNames[now.weekday - 1]}, ${now.day} ${_monthNames[now.month - 1]}',
+                  style: text.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
             ),
+          ),
+        ),
+        FilterPills<Slot?>(
+          groups: _slotPills(count, total),
+          selected: _filter,
+          onSelected: (v) => setState(() => _filter = v),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+            children: [
+              if (_filter == null) _statusCard(context, now),
+              for (final s in shown)
+                SlotCard(
+                  weekday: now.weekday,
+                  slot: s,
+                  store: store,
+                  highlight: _filter == null && s == next,
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }
 }
 
-class WeekPage extends StatelessWidget {
+enum _DayOrder { week, today }
+
+class WeekPage extends StatefulWidget {
   const WeekPage({super.key, required this.store});
   final AppStore store;
 
   @override
-  Widget build(BuildContext context) {
-    final today = DateTime.now().weekday;
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        for (var d = 1; d <= 7; d++)
-          Card(
-            shape: d == today
-                ? RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                        color: Theme.of(context).colorScheme.primary, width: 2),
-                  )
-                : null,
-            child: ListTile(
-              title: Text(dayNames[d - 1],
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text([
-                'B: ${store.dish(d, Slot.breakfast)}',
-                'L: ${store.dish(d, Slot.lunch)}',
-                'D: ${store.dish(d, Slot.dinner)}',
-              ].join('\n')),
-              isThreeLine: true,
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => DayEditPage(store: store, weekday: d)),
+  State<WeekPage> createState() => _WeekPageState();
+}
+
+class _WeekPageState extends State<WeekPage> {
+  Slot? _filter;
+  _DayOrder _order = _DayOrder.week;
+
+  AppStore get store => widget.store;
+
+  Widget _line(BuildContext context, Slot s, int day) {
+    final dish = store.dish(day, s);
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(s.icon, size: 16, color: s.color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              dish.isEmpty ? 'Not set' : dish,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: dish.isEmpty ? cs.onSurfaceVariant : null,
+                fontStyle: dish.isEmpty ? FontStyle.italic : FontStyle.normal,
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final today = DateTime.now().weekday;
+    final days = _order == _DayOrder.week
+        ? [for (var d = 1; d <= 7; d++) d]
+        : [for (var i = 0; i < 7; i++) (today - 1 + i) % 7 + 1];
+
+    int count(Slot s) =>
+        [for (var d = 1; d <= 7; d++) store.dish(d, s)].where((v) => v.isNotEmpty).length;
+    final total = Slot.values.where((s) => count(s) > 0).length;
+    final slots = _filter == null
+        ? [Slot.breakfast, Slot.lunch, Slot.dinner]
+        : [_filter!];
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: FilterPills<Slot?>(
+                groups: _slotPills(count, total),
+                selected: _filter,
+                onSelected: (v) => setState(() => _filter = v),
+              ),
+            ),
+            AppMenuButton<_DayOrder>(
+              tooltip: 'Sort days',
+              selected: _order,
+              onSelected: (v) => setState(() => _order = v),
+              options: const [
+                MenuOption(_DayOrder.week, 'Monday to Sunday',
+                    Icons.calendar_view_week),
+                MenuOption(_DayOrder.today, 'Starting today', Icons.today),
+              ],
+            ),
+          ],
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+            children: [
+              for (final d in days)
+                Card(
+                  margin: const EdgeInsets.symmetric(vertical: 5),
+                  clipBehavior: Clip.antiAlias,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    side: BorderSide(
+                      color: d == today ? cs.primary : cs.outlineVariant,
+                      width: d == today ? 1.6 : 1,
+                    ),
+                  ),
+                  child: InkWell(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => DayEditPage(store: store, weekday: d)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(dayNames[d - 1],
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w800)),
+                              if (d == today) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: cs.primary,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text('TODAY',
+                                      style: TextStyle(
+                                          color: cs.onPrimary,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800)),
+                                ),
+                              ],
+                              const Spacer(),
+                              Icon(Icons.chevron_right,
+                                  color: cs.onSurfaceVariant),
+                            ],
+                          ),
+                          for (final s in slots) _line(context, s, d),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -469,11 +851,15 @@ class HealthPage extends StatelessWidget {
 }
 
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key, required this.store, this.session});
+  const SettingsPage(
+      {super.key, required this.store, this.session, this.remindersOnly = false});
   final AppStore store;
 
   /// Null when running without accounts (Firebase not set up).
   final Session? session;
+
+  /// Show the reminder times instead of the family and account section.
+  final bool remindersOnly;
 
   Future<void> _pick(BuildContext context, bool weekend, Task task) async {
     final day = weekend ? DateTime.saturday : DateTime.monday;
@@ -751,28 +1137,37 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final role = store.role!;
     final code = store.familyCode;
+
+    if (!remindersOnly) {
+      return ListView(
+        children: [
+          if (session == null)
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: Text(store.myName.isEmpty ? role.label : store.myName),
+              subtitle: Text(role.label),
+              trailing: TextButton(
+                onPressed: () => _confirmReset(context),
+                child: const Text('Change'),
+              ),
+            ),
+          ..._familySection(context, code),
+        ],
+      );
+    }
+
     return ListView(
       children: [
-        if (session == null)
-          ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: Text(store.myName.isEmpty ? role.label : store.myName),
-            subtitle: Text(role.label),
-            trailing: TextButton(
-              onPressed: () => _confirmReset(context),
-              child: const Text('Change'),
-            ),
-          ),
-        ..._familySection(context, code),
-        const Divider(),
         SwitchListTile(
+          secondary: const Icon(Icons.notifications_outlined),
           title: const Text('Notifications'),
+          subtitle: Text('Reminders for: ${role.label}'),
           value: store.notificationsOn,
           onChanged: store.setNotificationsOn,
         ),
         for (final weekend in [false, true]) ...[
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
             child: Text(
               weekend
                   ? 'Weekend reminder times (Sat-Sun)'
@@ -788,30 +1183,7 @@ class SettingsPage extends StatelessWidget {
               onTap: () => _pick(context, weekend, t),
             ),
         ],
-        const Divider(),
-        if (code != null)
-          ListTile(
-            leading: const Icon(Icons.sync),
-            title: const Text('Check for menu changes now'),
-            onTap: () async {
-              final messenger = ScaffoldMessenger.of(context);
-              try {
-                await Sync.backgroundCheck();
-                await store.reload();
-                messenger.showSnackBar(
-                    const SnackBar(content: Text('Checked for changes')));
-              } catch (_) {
-                messenger.showSnackBar(
-                    const SnackBar(content: Text('Could not check. Are you online?')));
-              }
-            },
-          ),
-        ListTile(
-          leading: const Icon(Icons.notifications_active_outlined),
-          title: const Text('Send test notification'),
-          onTap: () => Notifier.instance
-              .showNow('Aaj Kya Banega?', 'Notifications are working.'),
-        ),
+        const SizedBox(height: 24),
       ],
     );
   }
