@@ -435,10 +435,6 @@ class SlotCard extends StatelessWidget {
                               style: text.titleSmall
                                   ?.copyWith(fontWeight: FontWeight.w700)),
                         ),
-                        const SizedBox(width: 8),
-                        Text(formatMinutes(eatTime(weekday, slot)),
-                            style: text.labelMedium
-                                ?.copyWith(color: cs.onSurfaceVariant)),
                         const Spacer(),
                         if (highlight)
                           Container(
@@ -550,6 +546,30 @@ class _TodayPageState extends State<TodayPage> {
     );
   }
 
+  Widget _reminderBanner(BuildContext context) => Card(
+        margin: const EdgeInsets.symmetric(vertical: 5),
+        child: ListTile(
+          leading: const Icon(Icons.alarm_add_outlined),
+          title: const Text('Set your reminder times'),
+          subtitle: const Text('Choose when you want each reminder.'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => ReminderSettingsPage(store: store)),
+          ),
+        ),
+      );
+
+  Widget _emptyMenuHint(BuildContext context) => const Card(
+        margin: EdgeInsets.symmetric(vertical: 5),
+        child: ListTile(
+          leading: Icon(Icons.restaurant_menu),
+          title: Text('No menu yet'),
+          subtitle: Text('Tap a meal below to add what is being cooked.'),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -557,14 +577,13 @@ class _TodayPageState extends State<TodayPage> {
     final text = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
 
-    // Next upcoming meal (breakfast/lunch/dinner) is highlighted.
-    Slot? next;
-    for (final s in Slot.values.where((s) => s.isMeal)) {
-      if (eatTime(now.weekday, s) + 60 > nowMin) {
-        next = s;
-        break;
-      }
-    }
+    // The meal to think about now: breakfast in the morning, lunch until
+    // the afternoon, dinner after that.
+    final Slot next = nowMin < 11 * 60
+        ? Slot.breakfast
+        : nowMin < 16 * 60
+            ? Slot.lunch
+            : Slot.dinner;
 
     int count(Slot s) => store.dish(now.weekday, s).isEmpty ? 0 : 1;
     final total = Slot.values.where((s) => count(s) > 0).length;
@@ -605,6 +624,9 @@ class _TodayPageState extends State<TodayPage> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
             children: [
+              if (_filter == null && !store.hasAnyTaskTime && store.notificationsOn)
+                _reminderBanner(context),
+              if (_filter == null && total == 0) _emptyMenuHint(context),
               if (_filter == null) _statusCard(context, now),
               for (final s in shown)
                 SlotCard(
@@ -874,7 +896,7 @@ class SettingsPage extends StatelessWidget {
 
   Future<void> _pick(BuildContext context, bool weekend, Task task) async {
     final day = weekend ? DateTime.saturday : DateTime.monday;
-    final cur = store.taskTime(task, day);
+    final cur = store.taskTime(task, day) ?? 8 * 60;
     final t = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: cur ~/ 60, minute: cur % 60),
@@ -1144,6 +1166,29 @@ class SettingsPage extends StatelessWidget {
     ));
   }
 
+  Widget _timeTile(BuildContext context, bool weekend, Task t) {
+    final minutes =
+        store.taskTime(t, weekend ? DateTime.saturday : DateTime.monday);
+    return ListTile(
+      title: Text(t.label),
+      trailing: minutes == null
+          ? Text('Not set',
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(formatMinutes(minutes)),
+                IconButton(
+                  tooltip: 'Remove time',
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () => store.clearTaskTime(weekend, t),
+                ),
+              ],
+            ),
+      onTap: () => _pick(context, weekend, t),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final role = store.role!;
@@ -1176,6 +1221,13 @@ class SettingsPage extends StatelessWidget {
           value: store.notificationsOn,
           onChanged: store.setNotificationsOn,
         ),
+        if (!store.hasAnyTaskTime)
+          const ListTile(
+            leading: Icon(Icons.info_outline),
+            title: Text('No reminder times yet'),
+            subtitle: Text('Tap a reminder below to choose its time. '
+                'Reminders without a time stay off.'),
+          ),
         for (final weekend in [false, true]) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
@@ -1187,12 +1239,7 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
           for (final t in Task.forRole(role))
-            ListTile(
-              title: Text(t.label),
-              trailing: Text(formatMinutes(store.taskTime(
-                  t, weekend ? DateTime.saturday : DateTime.monday))),
-              onTap: () => _pick(context, weekend, t),
-            ),
+            _timeTile(context, weekend, t),
         ],
         const SizedBox(height: 24),
       ],

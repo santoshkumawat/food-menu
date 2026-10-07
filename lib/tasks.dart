@@ -12,25 +12,23 @@ enum Role {
 /// A reminder that can be scheduled. Each task belongs to one role.
 enum Task {
   // Cook
-  cookWake(Role.cook, 'Wake-up: today\'s breakfast & lunch', 7 * 60, 10 * 60),
-  cookFollow(Role.cook, 'Follow-up if not prepared', 8 * 60, 11 * 60),
-  cookDinner(Role.cook, 'Tonight\'s dinner', 18 * 60, 18 * 60),
-  cookSoak(Role.cook, 'Soak dry fruits for tomorrow', 21 * 60, 21 * 60),
-  cookSoakFollow(Role.cook, 'Soaking follow-up', 21 * 60 + 30, 21 * 60 + 30),
+  cookWake(Role.cook, 'Wake-up: today\'s breakfast & lunch'),
+  cookFollow(Role.cook, 'Follow-up if not prepared'),
+  cookDinner(Role.cook, 'Tonight\'s dinner'),
+  cookSoak(Role.cook, 'Soak dry fruits for tomorrow'),
+  cookSoakFollow(Role.cook, 'Soaking follow-up'),
   // Me
-  meWater(Role.me, 'Warm water + soaked dry fruits', 8 * 60, 10 * 60 + 15),
-  meBreakfast(Role.me, 'Breakfast', 10 * 60, 11 * 60 + 30),
-  meLunch(Role.me, 'Lunch', 13 * 60, 14 * 60),
-  meSnack(Role.me, 'Snacks', 17 * 60, 17 * 60),
-  meDinner(Role.me, 'Dinner', 20 * 60, 21 * 60),
-  meMilk(Role.me, 'Turmeric milk', 21 * 60, 22 * 60 + 30);
+  meWater(Role.me, 'Morning routine'),
+  meBreakfast(Role.me, 'Breakfast'),
+  meLunch(Role.me, 'Lunch'),
+  meSnack(Role.me, 'Snacks'),
+  meDinner(Role.me, 'Dinner'),
+  meMilk(Role.me, 'Turmeric milk');
 
-  const Task(this.role, this.label, this.weekdayTime, this.weekendTime);
+  const Task(this.role, this.label);
 
   final Role role;
   final String label;
-  final int weekdayTime;
-  final int weekendTime;
 
   /// Done flag this task relates to ('cook' or 'soak'); null if none.
   String? get doneKind => switch (this) {

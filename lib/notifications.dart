@@ -118,6 +118,7 @@ class Notifier {
         final content = _content(store, task, day);
         if (content == null) continue;
         final minutes = store.taskTime(task, day.weekday);
+        if (minutes == null) continue; // not set by this member
         final when = tz.TZDateTime(tz.local, day.year, day.month, day.day,
             minutes ~/ 60, minutes % 60);
         if (!when.isAfter(now)) continue;
@@ -183,13 +184,13 @@ class Notifier {
           title: task == Task.cookSoak
               ? 'Soak dry fruits for tomorrow morning'
               : 'Did you soak the dry fruits?',
-          body: 'Almonds, kishmish and walnuts.',
+          body: 'Dry fruits for tomorrow morning.',
           doneLabel: 'Soaked',
         );
       case Task.meWater:
         return (
           title: 'Morning routine',
-          body: _or(d(Slot.morning), 'Warm water + soaked dry fruits'),
+          body: _or(d(Slot.morning), 'Time for your morning routine'),
           doneLabel: '',
         );
       case Task.meBreakfast:
@@ -206,7 +207,7 @@ class Notifier {
       case Task.meMilk:
         return (
           title: 'Turmeric milk',
-          body: _or(d(Slot.night), 'Time for your turmeric milk'),
+          body: _or(d(Slot.night), 'Time for your bedtime milk'),
           doneLabel: '',
         );
     }

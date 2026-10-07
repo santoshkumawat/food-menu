@@ -72,60 +72,12 @@ String formatMinutes(int m) {
   return '$h12:${min.toString().padLeft(2, '0')} ${h < 12 ? 'AM' : 'PM'}';
 }
 
-int _t(int h, int m) => h * 60 + m;
-
-/// When the meal is eaten (from the sheet). Shown on the cards.
-int eatTime(int weekday, Slot slot) {
-  final we = isWeekend(weekday);
-  return switch (slot) {
-    Slot.morning => we ? _t(10, 15) : _t(8, 0),
-    Slot.breakfast => we ? _t(11, 30) : _t(10, 0),
-    Slot.lunch => we ? _t(14, 0) : _t(13, 0),
-    Slot.snack => _t(17, 0),
-    Slot.dinner => we ? _t(21, 0) : _t(20, 0),
-    Slot.night => we ? _t(22, 30) : _t(21, 0),
-  };
-}
-
-const _almonds = 'Warm water + 1 tsp honey, soaked almonds, kishmish, walnuts';
-const _shilajit = 'Lukewarm water + Shilajit';
-const _milk = 'Turmeric milk';
-
-Map<int, Map<Slot, String>> defaultMenu() {
-  Map<Slot, String> d(String morning, String b, String l, String di) => {
-        Slot.morning: morning,
-        Slot.breakfast: b,
-        Slot.lunch: l,
-        Slot.snack: '',
-        Slot.dinner: di,
-        Slot.night: _milk,
-      };
-  const mixDal = 'Roti, Sabji (mix dal: toor, chana, masoor, urad), salad';
-  return {
-    1: d(_almonds, 'Sooji Cheela', mixDal, mixDal),
-    2: d(_shilajit, 'Lobhia Chaat',
-        'Roti, Sabji (Aloo, Bhindi, Gobhi), salad, curd', 'Sev Paratha'),
-    3: d(_almonds, 'Green Moong Cheela', 'Rice, toor dal, salad',
-        'Roti + sabzi'),
-    4: d(_shilajit, 'Chole / Kale Chana Mungfali Chhat',
-        'Roti, yellow moong dal (kale chana), salad, curd', 'Aloo Paratha'),
-    5: d(_almonds, 'Besan Cheela', 'Roti, Sabji (hare chana), salad, curd',
-        'Rice, toor dal'),
-    6: d(_shilajit, 'Sevaiyya', 'Rajma Chawal / Dosa', 'Rajma Chawal / Dosa'),
-    7: d(_almonds, 'Poha with peanuts', 'Chole Chawal / Idli Sambhar',
-        'Chole Chawal / Idli Sambhar'),
-  };
-}
-
-const defaultGuidelines = [
-  'Drink 3-4 liters of water',
-  'Avoid fried food, excess salt, chips, cookies and sweets',
-  'Use ghee in moderation',
-  'Include turmeric milk every night',
-  'Avoid curd at night (can have during lunch only)',
-  'Alternate Shilajit and honey each morning',
-  'Do not consume raw tomato or spinach (due to kidney stone history)',
-];
+/// Nothing is pre-filled: every family fills in its own menu, guidelines and
+/// reminder times.
+Map<int, Map<Slot, String>> defaultMenu() => {
+      for (var day = 1; day <= 7; day++)
+        day: {for (final s in Slot.values) s: ''},
+    };
 
 /// Done flags (`20261007_cook`, `20261007_soak`) are kept in their own prefs
 /// key so the notification action handler can write them without the store.
@@ -161,7 +113,7 @@ class AppStore extends ChangeNotifier {
   final Map<String, int> _taskTimes = {};
   bool notificationsOn = true;
   List<String> medicines = [];
-  List<String> guidelines = [...defaultGuidelines];
+  List<String> guidelines = [];
 
   ThemeMode themeMode = ThemeMode.system;
 
@@ -180,9 +132,16 @@ class AppStore extends ChangeNotifier {
 
   String dish(int weekday, Slot slot) => menu[weekday]![slot] ?? '';
 
-  int taskTime(Task t, int weekday) =>
-      _taskTimes['${isWeekend(weekday) ? 1 : 0}_${t.name}'] ??
-      (isWeekend(weekday) ? t.weekendTime : t.weekdayTime);
+  /// Minutes after midnight, or null when this member has not set one.
+  int? taskTime(Task t, int weekday) =>
+      _taskTimes['${isWeekend(weekday) ? 1 : 0}_${t.name}'];
+
+  bool get hasAnyTaskTime => _taskTimes.isNotEmpty;
+
+  void clearTaskTime(bool weekend, Task t) {
+    _taskTimes.remove('${weekend ? 1 : 0}_${t.name}');
+    _save();
+  }
 
   bool isDone(DateTime d, String kind) => done.contains(doneKey(d, kind));
 
@@ -317,7 +276,7 @@ class AppStore extends ChangeNotifier {
           .forEach((k, v) => _taskTimes[k] = v as int);
       notificationsOn = j['on'] as bool? ?? true;
       medicines = List<String>.from(j['medicines'] ?? []);
-      guidelines = List<String>.from(j['guidelines'] ?? defaultGuidelines);
+      guidelines = List<String>.from(j['guidelines'] ?? []);
       final r = j['role'] as String?;
       role = r == null ? null : Role.values.asNameMap()[r];
       myName = j['name'] as String? ?? '';

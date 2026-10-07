@@ -75,4 +75,31 @@ void main() {
     store.setThemeMode(ThemeMode.dark);
     expect(AppStore(store.prefs).themeMode, ThemeMode.dark);
   });
+
+  test('a fresh install has no seeded menu, guidelines or reminder times',
+      () async {
+    final store = await newStore();
+    for (var day = 1; day <= 7; day++) {
+      for (final slot in Slot.values) {
+        expect(store.dish(day, slot), isEmpty);
+      }
+    }
+    expect(store.guidelines, isEmpty);
+    expect(store.medicines, isEmpty);
+    expect(store.hasAnyTaskTime, isFalse);
+    for (final task in Task.values) {
+      expect(store.taskTime(task, DateTime.monday), isNull);
+      expect(store.taskTime(task, DateTime.saturday), isNull);
+    }
+  });
+
+  test('reminder times are saved only when the member sets them', () async {
+    final store = await newStore();
+    store.setTaskTime(false, Task.meBreakfast, 10 * 60);
+    final again = AppStore(store.prefs);
+    expect(again.taskTime(Task.meBreakfast, DateTime.tuesday), 10 * 60);
+    expect(again.taskTime(Task.meBreakfast, DateTime.sunday), isNull);
+    again.clearTaskTime(false, Task.meBreakfast);
+    expect(again.hasAnyTaskTime, isFalse);
+  });
 }
