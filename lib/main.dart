@@ -21,6 +21,7 @@ Future<void> main() async {
   // Reminders follow every change: menu edits, times, role, done ticks.
   store.addListener(() => notifier.reschedule(store));
   store.onMenuEdited = () => Sync.pushMenu(store);
+  store.onMedicinesEdited = () => Sync.pushMedicines(store.medicines);
   notifier.onDoneChanged = store.reloadDone;
 
   if (store.isSetUp) {

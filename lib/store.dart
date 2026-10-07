@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -125,9 +126,12 @@ class AppStore extends ChangeNotifier {
   int lastSeenRev = 0;
   Set<String> done = {};
 
-  /// Called after the user edits shared data: menu, guidelines or medicines
+  /// Called after the user edits shared data: menu or guidelines
   /// (not for edits received from sync).
   VoidCallback? onMenuEdited;
+
+  /// Called after the user edits their personal medicine list.
+  VoidCallback? onMedicinesEdited;
 
   bool get isSetUp => role != null;
 
@@ -168,10 +172,25 @@ class AppStore extends ChangeNotifier {
     _save();
   }
 
+  /// Medicine timings are personal: never shared with the family, but saved
+  /// to this person's own account so they follow them to a new phone.
   void setMedicines(List<String> v) {
     medicines = v;
     _save();
-    onMenuEdited?.call();
+    onMedicinesEdited?.call();
+  }
+
+  /// The signed-in person's list as saved on their account.
+  void loadMedicines(List<String> v) {
+    if (listEquals(medicines, v)) return;
+    medicines = v;
+    _save();
+  }
+
+  /// Forgets everything personal (on sign out).
+  void clearPersonal() {
+    medicines = [];
+    _save();
   }
 
   void setGuidelines(List<String> v) {
@@ -238,19 +257,16 @@ class AppStore extends ChangeNotifier {
           '${e.key}': {for (final s in e.value.entries) s.key.name: s.value},
       });
 
-  /// Everything the family shares: menu, guidelines and medicines.
+  /// Everything the family shares: menu and guidelines.
   Map<String, dynamic> sharedFields() => {
         'menu': menuToJson(),
         'guidelines': guidelines,
-        'medicines': medicines,
       };
 
   /// Replaces the shared data with the family's copy.
-  void applyRemoteMenu(String json, int rev,
-      {List<String>? guidelines, List<String>? medicines}) {
+  void applyRemoteMenu(String json, int rev, {List<String>? guidelines}) {
     _menuFromJson(jsonDecode(json) as Map<String, dynamic>);
     if (guidelines != null) this.guidelines = guidelines;
-    if (medicines != null) this.medicines = medicines;
     lastSeenRev = rev;
     _save();
   }

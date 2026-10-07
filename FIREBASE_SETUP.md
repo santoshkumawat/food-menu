@@ -45,6 +45,13 @@ menu and the "done" ticks.
   person sees the invitation after signing up or logging in with that email
   or username.
 
+## What is shared and what is private
+- **Shared with the family:** the weekly menu, the daily guidelines, and the
+  Prepared / Soaked ticks.
+- **Private to each person:** their medicine timings (stored on their own
+  account only, never visible to other members), reminder times, the
+  notification switch and the theme.
+
 ## Notes
 - Menu edits show up on other phones within about 15 minutes if the app is
   closed (Android decides the exact timing), and instantly if it is open.

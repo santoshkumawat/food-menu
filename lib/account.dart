@@ -56,6 +56,7 @@ class Session extends ChangeNotifier {
   Future<void> _evaluate(User? user) async {
     final run = ++_run;
     if (user == null) {
+      store.clearPersonal();
       if (store.isSetUp) store.resetProfile();
       email = username = name = '';
       return _set(AuthState.signedOut);
@@ -70,6 +71,10 @@ class Session extends ChangeNotifier {
       if (data == null) return _set(AuthState.needsProfile);
       username = (data['username'] ?? '') as String;
       name = (data['name'] ?? '') as String;
+      // Personal medicine list: always this account's, never another's.
+      store.loadMedicines([
+        for (final m in (data['medicines'] as List?) ?? const []) '$m'
+      ]);
 
       final code = data['familyCode'] as String?;
       if (code != null) {
@@ -137,6 +142,7 @@ class Session extends ChangeNotifier {
   Future<void> signOut() async {
     await Sync.stopBackground();
     store.resetProfile();
+    store.clearPersonal();
     await _auth.signOut();
   }
 

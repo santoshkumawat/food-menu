@@ -500,8 +500,8 @@ class _TodayPageState extends State<TodayPage> {
       .toLowerCase()
       .contains('almond');
 
+  /// The cook's checklist. Only shown on the cook's phone.
   Widget _statusCard(BuildContext context, DateTime now) {
-    final isCook = store.role == Role.cook;
     final cookDone = store.isDone(now, 'cook');
     final soakNeeded = _needsSoaking(now);
     final soakDone = store.isDone(now, 'soak');
@@ -513,9 +513,9 @@ class _TodayPageState extends State<TodayPage> {
           leading: Icon(done ? Icons.check_circle : Icons.radio_button_unchecked,
               color: done ? Colors.green : null),
           title: Text(label),
-          trailing: (isCook && !done && onMark != null)
+          trailing: (!done && onMark != null)
               ? FilledButton.tonal(onPressed: onMark, child: const Text('Done'))
-              : Text(done ? 'Done' : 'Not yet'),
+              : const Text('Done'),
         );
 
     return Card(
@@ -528,7 +528,7 @@ class _TodayPageState extends State<TodayPage> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(isCook ? 'Your checklist' : 'Kitchen status',
+                  child: Text('Your checklist',
                       style: Theme.of(context).textTheme.titleMedium),
                 ),
                 Text('$doneCount/$total done',
@@ -627,7 +627,8 @@ class _TodayPageState extends State<TodayPage> {
               if (_filter == null && !store.hasAnyTaskTime && store.notificationsOn)
                 _reminderBanner(context),
               if (_filter == null && total == 0) _emptyMenuHint(context),
-              if (_filter == null) _statusCard(context, now),
+              if (_filter == null && store.role == Role.cook)
+                _statusCard(context, now),
               for (final s in shown)
                 SlotCard(
                   weekday: now.weekday,
@@ -819,7 +820,8 @@ class HealthPage extends StatelessWidget {
   final AppStore store;
 
   Widget _section(BuildContext context, String title, List<String> items,
-      void Function(List<String>) onChange, String addLabel) {
+      void Function(List<String>) onChange, String addLabel,
+      {String? note}) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -827,6 +829,25 @@ class HealthPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: Theme.of(context).textTheme.titleMedium),
+            if (note != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_outline,
+                        size: 14,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(note,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant)),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 4),
             if (items.isEmpty) const Text('Nothing added yet'),
             for (var i = 0; i < items.length; i++)
@@ -867,10 +888,20 @@ class HealthPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        _section(context, 'Daily guidelines', store.guidelines,
-            store.setGuidelines, 'Add guideline'),
-        _section(context, 'Medicine timings', store.medicines,
-            store.setMedicines, 'Add medicine (e.g. 8:00 AM - name)'),
+        _section(
+            context,
+            'Daily guidelines',
+            store.guidelines,
+            store.setGuidelines,
+            'Add guideline',
+            note: store.familyCode == null ? null : 'Shared with your family'),
+        _section(
+            context,
+            'My medicine timings',
+            store.medicines,
+            store.setMedicines,
+            'Add medicine (e.g. 8:00 AM - name)',
+            note: 'Private: only you can see this'),
         const Padding(
           padding: EdgeInsets.all(16),
           child: Center(

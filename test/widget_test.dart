@@ -36,11 +36,12 @@ void main() {
     store.setProfile(Role.me, 'Test', null);
     await tester.pumpWidget(App(store: store, session: Session(store)));
 
-    // Today: All shows the checklist; the Morning pill hides it.
-    expect(find.text('Kitchen status'), findsOneWidget);
+    // Today: the cook's checklist is not shown for the "Me" role.
+    expect(find.text('Your checklist'), findsNothing);
+    expect(find.text('Kitchen status'), findsNothing);
     await tester.tap(find.text('Morning'));
     await tester.pump();
-    expect(find.text('Kitchen status'), findsNothing);
+    expect(find.text('Morning routine'), findsWidgets);
 
     // Week tab and the sort menu open without layout errors.
     await tester.tap(find.text('Week'));
@@ -103,26 +104,28 @@ void main() {
     expect(again.hasAnyTaskTime, isFalse);
   });
 
-  test('family data (menu, guidelines, medicines) is replaced on join',
+  test('family menu and guidelines are replaced on join; medicines stay personal',
       () async {
     final admin = await newStore();
     admin.setDish(2, Slot.dinner, 'Sev Paratha');
     admin.setGuidelines(['Drink water']);
-    admin.setMedicines(['8 AM - vitamin']);
+    admin.setMedicines(['8 AM - admin only']);
     final shared = admin.sharedFields();
+    expect(shared.containsKey('medicines'), isFalse);
 
     // A new member's phone starts empty and receives the family's copy.
     final member = await newStore();
     member.setDish(1, Slot.lunch, 'local leftover');
+    member.setMedicines(['9 PM - my own']);
     member.applyRemoteMenu(shared['menu'] as String, 4,
-        guidelines: List<String>.from(shared['guidelines'] as List),
-        medicines: List<String>.from(shared['medicines'] as List));
+        guidelines: List<String>.from(shared['guidelines'] as List));
 
     final reopened = AppStore(member.prefs);
     expect(reopened.dish(2, Slot.dinner), 'Sev Paratha');
     expect(reopened.dish(1, Slot.lunch), isEmpty);
     expect(reopened.guidelines, ['Drink water']);
-    expect(reopened.medicines, ['8 AM - vitamin']);
+    // The family's guidelines arrive, but medicines stay personal.
+    expect(reopened.medicines, ['9 PM - my own']);
     expect(reopened.lastSeenRev, 4);
   });
 }

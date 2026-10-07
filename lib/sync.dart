@@ -256,10 +256,20 @@ class Sync {
       data['menu'] as String,
       data['rev'] as int? ?? 1,
       guidelines: _strings(data['guidelines']),
-      medicines: _strings(data['medicines']),
     );
     await _mergeDone(s.prefs, data['done']);
     await s.reloadDone();
+  }
+
+  /// Saves this person's private medicine list on their own account.
+  static Future<void> pushMedicines(List<String> list) async {
+    if (!available || FirebaseAuth.instance.currentUser == null) return;
+    try {
+      await _user(_myUid)
+          .set({'medicines': list}, SetOptions(merge: true)).timeout(_timeout);
+    } catch (_) {
+      // Offline: Firestore keeps the write queued and sends it later.
+    }
   }
 
   static List<String>? _strings(Object? v) =>
@@ -373,6 +383,7 @@ class Sync {
     try {
       await _shared(code).set({
         ...s.sharedFields(),
+        'medicines': FieldValue.delete(), // medicines are personal now
         'rev': FieldValue.increment(1),
         'editedById': _myUid,
         'editedByName': s.myName,
@@ -430,19 +441,16 @@ class Sync {
       for (final e in s.menu.entries) e.key: Map<Slot, String>.of(e.value)
     };
     final oldGuidelines = [...s.guidelines];
-    final oldMedicines = [...s.medicines];
     s.applyRemoteMenu(
       data['menu'] as String,
       rev,
       guidelines: _strings(data['guidelines']),
-      medicines: _strings(data['medicines']),
     );
     final who = (data['editedByName'] as String?)?.trim();
     return (
       who: (who == null || who.isEmpty) ? 'Someone' : who,
       summary: _summary(before, s.menu,
-          guidelinesChanged: !listEquals(oldGuidelines, s.guidelines),
-          medicinesChanged: !listEquals(oldMedicines, s.medicines)),
+          guidelinesChanged: !listEquals(oldGuidelines, s.guidelines)),
     );
   }
 
@@ -450,7 +458,6 @@ class Sync {
     Map<int, Map<Slot, String>> a,
     Map<int, Map<Slot, String>> b, {
     required bool guidelinesChanged,
-    required bool medicinesChanged,
   }) {
     final changes = <String>[];
     for (var day = 1; day <= 7; day++) {
@@ -465,7 +472,6 @@ class Sync {
     final shown = changes.take(3).toList();
     if (changes.length > 3) shown.add('+${changes.length - 3} more');
     if (guidelinesChanged) shown.add('Guidelines updated');
-    if (medicinesChanged) shown.add('Medicine list updated');
     return shown.isEmpty ? 'Family data updated' : shown.join('\n');
   }
 
